@@ -1,9 +1,14 @@
 import type {
+  BookLevel,
   CurveRow,
   Margin,
   QuotesByExpiry,
   ScatterRow,
   SmileChartRow,
+  SmileLevelDelete,
+  SmileLevelsPatchMessage,
+  SmilePoint,
+  SmileLevelsSnapshotMessage,
   SmilePointUpdateMessage,
   SmileSnapshotMessage,
   SviSmile,
@@ -13,26 +18,54 @@ import type {
 
 export const FALLBACK_WS_URL = "ws://localhost:8765";
 export const RECONNECT_DELAYS_MS = [2000, 4000, 8000, 15000];
-export const MAX_BID_POINTS_PER_SMILE = 120;
-export const MAX_ASK_POINTS_PER_SMILE = 120;
+export const MAX_BID_POINTS_PER_SMILE = 400;
+export const MAX_ASK_POINTS_PER_SMILE = 400;
+export const FITTED_CURVE_COLOR = "#ff9f2a";
+const TRADE_FLASH_DURATION_MS = 10_000;
+
+export type ThroughMatrixSide = "neutral" | "bid" | "ask";
+
+export type SmileThroughCell = {
+  strike: number;
+  side: ThroughMatrixSide;
+  throughValue: number;
+  sviIv: number | null;
+  bestBidIv: number | null;
+  bestAskIv: number | null;
+  bidThrough: number;
+  askThrough: number;
+};
+
+export type SmileThroughRow = {
+  expiry: number;
+  label: string;
+  cellsByStrike: Record<string, SmileThroughCell>;
+  activeCount: number;
+};
+
+export type SmileThroughMatrix = {
+  strikes: number[];
+  rows: SmileThroughRow[];
+  maxThrough: number;
+};
 
 export const palette = [
-  "#06b6d4",
-  "#f59e0b",
-  "#22c55e",
-  "#8b5cf6",
-  "#ef4444",
-  "#3b82f6",
-  "#14b8a6",
-  "#f97316",
-  "#84cc16",
-  "#ec4899",
-  "#0ea5e9",
-  "#e11d48",
-  "#7c3aed",
-  "#0891b2",
-  "#65a30d",
-  "#ea580c",
+  "#ff9f2a",
+  "#6ea5ff",
+  "#f5c96a",
+  "#7dc0ff",
+  "#e58c2d",
+  "#9cc5ff",
+  "#d9a85f",
+  "#5ea9f2",
+  "#f0b267",
+  "#89b5e4",
+  "#c6d1df",
+  "#aebdce",
+  "#f6a94b",
+  "#79b1ff",
+  "#d4b680",
+  "#679fd8",
 ];
 
 export function formatExpiry(expiry: number, label?: string) {
@@ -50,7 +83,20 @@ export function formatTs(ts: number | null) {
 }
 
 export function safeNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
 }
 
 export function normalizeIvForChart(value: unknown): number | null {
@@ -149,23 +195,565 @@ export function resolveSmileXValues(smile: SviSmile, snapshot: SviSurfaceSnapsho
   return [];
 }
 
+function mergeBookLevels(
+  existingLevels: BookLevel[] | undefined,
+  incomingLevels: BookLevel[] | undefined,
+  incomingBestIv: number | null
+) {
+  if (!Array.isArray(incomingLevels)) {
+    return existingLevels;
+  }
+
+  if (incomingLevels.length === 0) {
+    // If best IV is present, treat empty levels as intentional "best-only" state.
+    if (incomingBestIv != null) {
+      return [];
+    }
+    // Otherwise, preserve last known levels to avoid transient wipe flicker.
+    if (Array.isArray(existingLevels) && existingLevels.length > 0) {
+      return existingLevels;
+    }
+  }
+
+  return incomingLevels;
+}
+
+const TRADE_SIDE_VALUES = new Set([
+  "trade",
+  "last_trade",
+  "last",
+  "fill",
+  "filled",
+  "ltp",
+  "trd",
+]);
+
+const BID_SIDE_VALUES = new Set(["bid"]);
+const ASK_SIDE_VALUES = new Set(["ask", "offer"]);
+
+const TRADE_IV_KEYS = [
+  "last_trade_iv",
+  "lastTradeIV",
+  "lastTradeIv",
+  "trade_iv",
+  "tradeIv",
+  "last_iv",
+  "lastIv",
+  "fill_iv",
+  "fillIv",
+] as const;
+
+const TRADE_PRICE_KEYS = [
+  "last_trade_price",
+  "lastTradePrice",
+  "trade_price",
+  "tradePrice",
+  "last_price",
+  "lastPrice",
+  "fill_price",
+  "fillPrice",
+] as const;
+
+const TRADE_LEVEL_ARRAY_KEYS = [
+  "last_trades",
+  "lastTrades",
+  "last_trade_levels",
+  "lastTradeLevels",
+  "trade_levels",
+  "tradeLevels",
+  "last_levels",
+  "lastLevels",
+  "trades",
+] as const;
+
+const LOG_MONEYNESS_KEYS = ["log_moneyness", "logMoneyness", "x"] as const;
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object") return null;
+  return value as Record<string, unknown>;
+}
+
+function normalizeSide(value: unknown) {
+  if (typeof value !== "string") return "";
+  return value.trim().toLowerCase();
+}
+
+function readNumericAliases(source: unknown, aliases: readonly string[]) {
+  const record = asRecord(source);
+  if (!record) return null;
+
+  for (const alias of aliases) {
+    const parsed = safeNumber(record[alias]);
+    if (parsed != null) return parsed;
+  }
+
+  return null;
+}
+
+function readBookLevelArrayAliases(source: unknown, aliases: readonly string[]) {
+  const record = asRecord(source);
+  if (!record) return [];
+
+  const levels: BookLevel[] = [];
+  for (const alias of aliases) {
+    const candidate = record[alias];
+    if (!Array.isArray(candidate)) continue;
+
+    for (const item of candidate) {
+      if (!item || typeof item !== "object") continue;
+      levels.push(item as BookLevel);
+    }
+  }
+
+  return levels;
+}
+
+function hasTradeFlag(source: unknown) {
+  const record = asRecord(source);
+  if (!record) return false;
+
+  return (
+    record.is_trade === true ||
+    record.isTrade === true ||
+    record.is_last_trade === true ||
+    record.isLastTrade === true ||
+    record.is_fill === true ||
+    record.isFill === true ||
+    record.trade === true ||
+    record.last_trade === true
+  );
+}
+
+function hasTradeToken(value: unknown) {
+  if (typeof value !== "string") return false;
+  const lowered = value.toLowerCase();
+  return (
+    lowered.includes(":trade:") ||
+    lowered.includes(":trade") ||
+    lowered.includes(":last:") ||
+    lowered.includes(":last_trade")
+  );
+}
+
+function isTradeSide(value: unknown) {
+  return TRADE_SIDE_VALUES.has(normalizeSide(value));
+}
+
+function isBidSide(value: unknown) {
+  return BID_SIDE_VALUES.has(normalizeSide(value));
+}
+
+function isAskSide(value: unknown) {
+  return ASK_SIDE_VALUES.has(normalizeSide(value));
+}
+
+function resolveLevelTradeInfo(level: BookLevel | null | undefined) {
+  if (!level) {
+    return {
+      isTrade: false,
+      iv: null as number | null,
+      price: null as number | null,
+    };
+  }
+
+  const hintedIv = normalizeIvForChart(readNumericAliases(level, TRADE_IV_KEYS));
+  const hintedPrice = readNumericAliases(level, TRADE_PRICE_KEYS);
+  const explicitTrade =
+    isTradeSide(level.side) ||
+    hintedIv != null ||
+    hintedPrice != null ||
+    hasTradeFlag(level) ||
+    hasTradeToken(level.id) ||
+    hasTradeToken(level.ticker);
+
+  if (!explicitTrade) {
+    return {
+      isTrade: false,
+      iv: null as number | null,
+      price: null as number | null,
+    };
+  }
+
+  return {
+    isTrade: true,
+    iv: hintedIv ?? normalizeIvForChart(level.iv),
+    price: hintedPrice ?? safeNumber(level.price),
+  };
+}
+
+function resolvePointTradeInfo(point: SmilePoint, useBboFallback = false) {
+  let iv = normalizeIvForChart(readNumericAliases(point, TRADE_IV_KEYS));
+  let price = readNumericAliases(point, TRADE_PRICE_KEYS);
+  let tradeLevel: BookLevel | null = point.last_trade_level ?? null;
+  let tradeLevels: BookLevel[] | undefined = Array.isArray(point.last_trade_levels)
+    ? point.last_trade_levels
+    : undefined;
+
+  const aliasTradeLevels = readBookLevelArrayAliases(point, TRADE_LEVEL_ARRAY_KEYS);
+  if (!tradeLevels && aliasTradeLevels.length > 0) {
+    tradeLevels = aliasTradeLevels;
+  }
+
+  const candidateLevels: BookLevel[] = [
+    ...(tradeLevel ? [tradeLevel] : []),
+    ...(tradeLevels ?? []),
+    ...aliasTradeLevels,
+    ...(point.bid_levels ?? []),
+    ...(point.ask_levels ?? []),
+  ];
+
+  for (let idx = candidateLevels.length - 1; idx >= 0; idx -= 1) {
+    const level = candidateLevels[idx];
+    const tradeInfo = resolveLevelTradeInfo(level);
+    if (!tradeInfo.isTrade) continue;
+
+    iv = iv ?? tradeInfo.iv;
+    price = price ?? tradeInfo.price;
+    tradeLevel = tradeLevel ?? level;
+    tradeLevels = tradeLevels ?? [level];
+
+    if (iv != null && price != null) break;
+  }
+
+  if (useBboFallback && iv == null && price != null) {
+    const bestBidIv = normalizeIvForChart(point.best_bid_iv);
+    const bestAskIv = normalizeIvForChart(point.best_ask_iv);
+
+    if (bestBidIv != null && bestAskIv != null) {
+      iv = (bestBidIv + bestAskIv) / 2;
+    } else {
+      iv = bestBidIv ?? bestAskIv;
+    }
+
+    if (iv == null) {
+      for (const level of [...(point.bid_levels ?? []), ...(point.ask_levels ?? [])]) {
+        const fallbackIv = normalizeIvForChart(level.iv);
+        if (fallbackIv != null) {
+          iv = fallbackIv;
+          break;
+        }
+      }
+    }
+  }
+
+  return { iv, price, tradeLevel, tradeLevels };
+}
+
+function isTradeLevel(level: BookLevel | null | undefined) {
+  return resolveLevelTradeInfo(level).isTrade;
+}
+
+function mergeSmilePoint(
+  existingPoint: SmilePoint | undefined,
+  incomingPoint: SmilePoint,
+  sourceTs: number | null = null,
+  enableTradeFlash = false
+): SmilePoint {
+  const incomingLogMoneyness = safeNumber(
+    (incomingPoint as { log_moneyness?: unknown }).log_moneyness
+  );
+  const incomingBestBidIv = safeNumber(
+    (incomingPoint as { best_bid_iv?: unknown }).best_bid_iv
+  );
+  const incomingBestAskIv = safeNumber(
+    (incomingPoint as { best_ask_iv?: unknown }).best_ask_iv
+  );
+  const incomingTradeInfo = resolvePointTradeInfo(incomingPoint, false);
+  const existingTradeIv = normalizeIvForChart(existingPoint?.last_trade_iv);
+  const incomingTradeIv = incomingTradeInfo.iv;
+  const tradeIvChanged =
+    incomingTradeIv != null &&
+    (existingTradeIv == null || Math.abs(existingTradeIv - incomingTradeIv) > 1e-8);
+  const updateTs = sourceTs ?? Date.now();
+  const nextTradeUpdateTs =
+    tradeIvChanged
+      ? updateTs
+      : existingPoint?.last_trade_update_ts ?? null;
+  const nextTradeFlashUntilTs = tradeIvChanged
+    ? (enableTradeFlash ? updateTs + TRADE_FLASH_DURATION_MS : null)
+    : existingPoint?.last_trade_flash_until_ts ?? null;
+
+  return {
+    ...existingPoint,
+    ...incomingPoint,
+    log_moneyness: incomingLogMoneyness ?? existingPoint?.log_moneyness ?? incomingPoint.log_moneyness,
+    bid_levels: mergeBookLevels(existingPoint?.bid_levels, incomingPoint.bid_levels, incomingBestBidIv),
+    ask_levels: mergeBookLevels(existingPoint?.ask_levels, incomingPoint.ask_levels, incomingBestAskIv),
+    best_bid_iv: incomingBestBidIv ?? existingPoint?.best_bid_iv,
+    best_ask_iv: incomingBestAskIv ?? existingPoint?.best_ask_iv,
+    last_trade_iv: incomingTradeIv ?? existingTradeIv,
+    last_trade_price: incomingTradeInfo.price ?? existingPoint?.last_trade_price,
+    last_trade_update_ts: nextTradeUpdateTs,
+    last_trade_flash_until_ts: nextTradeFlashUntilTs,
+    last_trade_level: incomingTradeInfo.tradeLevel ?? existingPoint?.last_trade_level,
+    last_trade_levels: incomingTradeInfo.tradeLevels ?? existingPoint?.last_trade_levels,
+  };
+}
+
+type SmileQuoteMessage =
+  | SmileSnapshotMessage
+  | SmileLevelsSnapshotMessage
+  | SmileLevelsPatchMessage
+  | SmilePointUpdateMessage;
+
+function resolveMessageAtm(message: SmileQuoteMessage) {
+  return (
+    safeNumber(message.atm) ??
+    safeNumber(message.smile_atm) ??
+    safeNumber(message.underlying?.smile_atm) ??
+    safeNumber(message.underlying?.source_price) ??
+    safeNumber(message.underlying?.mark_price) ??
+    safeNumber(message.underlying?.filtered_mid)
+  );
+}
+
+function resolveMessageLastTradePrice(message: SmileQuoteMessage) {
+  return safeNumber(message.last_trade_price) ?? safeNumber(message.underlying?.last_trade_price);
+}
+
+function applyPatchDeletes(
+  pointsByStrike: Record<string, SmilePoint>,
+  deletes: SmileLevelDelete[] | undefined
+) {
+  if (!Array.isArray(deletes) || deletes.length === 0) return;
+
+  for (const deletion of deletes) {
+    const strike = safeNumber(deletion.strike);
+    if (strike == null) continue;
+
+    const strikeKey = String(strike);
+    const existingPoint = pointsByStrike[strikeKey];
+    if (!existingPoint) continue;
+
+    const side = normalizeSide(deletion.side);
+    const isTradeDeletion =
+      isTradeSide(side) ||
+      hasTradeToken(deletion.id) ||
+      hasTradeToken(deletion.ticker);
+    const isBidDeletion = isBidSide(side);
+    const isAskDeletion = isAskSide(side);
+
+    if (!isBidDeletion && !isAskDeletion && !isTradeDeletion) {
+      continue;
+    }
+
+    if (isTradeDeletion) {
+      pointsByStrike[strikeKey] = {
+        ...existingPoint,
+        last_trade_iv: null,
+        last_trade_price: null,
+        last_trade_update_ts: null,
+        last_trade_flash_until_ts: null,
+        last_trade_level: null,
+      };
+      continue;
+    }
+
+    const levelKey = isBidDeletion ? "bid_levels" : "ask_levels";
+    const existingLevels = existingPoint[levelKey];
+    if (!Array.isArray(existingLevels) || existingLevels.length === 0) continue;
+
+    const nextLevels = existingLevels.filter((level) => {
+      if (deletion.id && level.id) return level.id !== deletion.id;
+      if (deletion.ticker && level.ticker) return level.ticker !== deletion.ticker;
+      return true;
+    });
+
+    pointsByStrike[strikeKey] = {
+      ...existingPoint,
+      [levelKey]: nextLevels,
+    };
+  }
+}
+
+function applyPatchUpserts(
+  pointsByStrike: Record<string, SmilePoint>,
+  upserts: BookLevel[] | undefined,
+  sourceTs: number | null = null,
+  enableTradeFlash = false
+) {
+  if (!Array.isArray(upserts) || upserts.length === 0) return;
+
+  for (const upsert of upserts) {
+    const strike = safeNumber(upsert.strike);
+    if (strike == null) continue;
+
+    const strikeKey = String(strike);
+    let existingPoint = pointsByStrike[strikeKey];
+    if (!existingPoint) {
+      const inferredLogMoneyness = readNumericAliases(upsert, LOG_MONEYNESS_KEYS);
+      if (inferredLogMoneyness == null) continue;
+
+      existingPoint = {
+        strike,
+        log_moneyness: inferredLogMoneyness,
+      };
+      pointsByStrike[strikeKey] = existingPoint;
+    }
+
+    const side = normalizeSide(upsert.side);
+    const levelTradeInfo = resolveLevelTradeInfo(upsert);
+    const isExplicitTradeUpsert = isTradeSide(side);
+    const isBidUpsert = isBidSide(side);
+    const isAskUpsert = isAskSide(side);
+    const existingTradeIv = normalizeIvForChart(existingPoint.last_trade_iv);
+    const tradeIvChanged =
+      levelTradeInfo.iv != null &&
+      (existingTradeIv == null || Math.abs(existingTradeIv - levelTradeInfo.iv) > 1e-8);
+    const updateTs = sourceTs ?? Date.now();
+    const nextTradeUpdateTs =
+      tradeIvChanged
+        ? updateTs
+        : existingPoint.last_trade_update_ts ?? null;
+    const nextTradeFlashUntilTs =
+      tradeIvChanged
+        ? (enableTradeFlash ? updateTs + TRADE_FLASH_DURATION_MS : null)
+        : existingPoint.last_trade_flash_until_ts ?? null;
+
+    if (isExplicitTradeUpsert || (!isBidUpsert && !isAskUpsert && levelTradeInfo.isTrade)) {
+      pointsByStrike[strikeKey] = {
+        ...existingPoint,
+        last_trade_iv: levelTradeInfo.iv ?? existingTradeIv,
+        last_trade_price: levelTradeInfo.price ?? existingPoint.last_trade_price ?? null,
+        last_trade_update_ts: nextTradeUpdateTs,
+        last_trade_flash_until_ts: nextTradeFlashUntilTs,
+        last_trade_level: {
+          ...(existingPoint.last_trade_level ?? {}),
+          ...upsert,
+        },
+      };
+      continue;
+    }
+
+    if (!isBidUpsert && !isAskUpsert) {
+      continue;
+    }
+
+    const levelKey = isBidUpsert ? "bid_levels" : "ask_levels";
+    const existingLevels = Array.isArray(existingPoint[levelKey]) ? [...existingPoint[levelKey]!] : [];
+    const upsertId = typeof upsert.id === "string" ? upsert.id : null;
+
+    const nextLevels =
+      upsertId != null
+        ? (() => {
+            const existingIndex = existingLevels.findIndex((level) => level.id === upsertId);
+            if (existingIndex >= 0) {
+              const replaced = [...existingLevels];
+              replaced[existingIndex] = { ...replaced[existingIndex], ...upsert };
+              return replaced;
+            }
+            return [...existingLevels, upsert];
+          })()
+        : [...existingLevels, upsert];
+
+    let nextPoint: SmilePoint = {
+      ...existingPoint,
+      [levelKey]: nextLevels,
+    };
+
+    if (levelTradeInfo.isTrade) {
+      nextPoint = {
+        ...nextPoint,
+        last_trade_iv: levelTradeInfo.iv ?? normalizeIvForChart(nextPoint.last_trade_iv),
+        last_trade_price: levelTradeInfo.price ?? nextPoint.last_trade_price ?? null,
+        last_trade_update_ts: nextTradeUpdateTs,
+        last_trade_flash_until_ts: nextTradeFlashUntilTs,
+        last_trade_level: {
+          ...(nextPoint.last_trade_level ?? {}),
+          ...upsert,
+        },
+      };
+    }
+
+    pointsByStrike[strikeKey] = nextPoint;
+  }
+}
+
 export function applySmileSnapshot(current: QuotesByExpiry, msg: SmileSnapshotMessage): QuotesByExpiry {
   const expiryKey = String(msg.expiry);
   const existing = current[expiryKey];
+  const nextTs = Math.max(existing?.ts ?? Number.NEGATIVE_INFINITY, msg.ts);
+  const nextAtm = resolveMessageAtm(msg);
+  const nextAtmVersion = safeNumber(msg.atm_version);
+  const nextLastTradePrice = resolveMessageLastTradePrice(msg);
+  const existingAtmVersion = existing?.atmVersion ?? null;
 
-  if (existing && msg.ts < existing.ts) {
-    return current;
+  // Some feeds emit transient empty snapshots before the next populated quote batch.
+  // Keep the last populated smile to avoid the chart flashing down to just the fitted line.
+  if (existing && (msg.points?.length ?? 0) === 0) {
+    return {
+      ...current,
+      [expiryKey]: {
+        ...existing,
+        ts: nextTs,
+        label: msg.label ?? existing.label,
+      },
+    };
   }
 
-  const pointsByStrike: Record<string, typeof msg.points[number]> = {};
+  const pointsByStrike: Record<string, typeof msg.points[number]> = {
+    ...(existing?.pointsByStrike ?? {}),
+  };
   for (const point of msg.points ?? []) {
-    pointsByStrike[String(point.strike)] = point;
+    const strikeKey = String(point.strike);
+    const existingPoint = pointsByStrike[strikeKey];
+    pointsByStrike[strikeKey] = mergeSmilePoint(existingPoint, point, msg.ts, false);
   }
 
   return {
     ...current,
     [expiryKey]: {
-      ts: msg.ts,
+      ts: nextTs,
+      atm: nextAtm ?? existing?.atm ?? null,
+      atmVersion: nextAtmVersion ?? existingAtmVersion,
+      lastTradePrice: nextLastTradePrice ?? existing?.lastTradePrice ?? null,
+      label: msg.label ?? existing?.label,
+      pointsByStrike,
+    },
+  };
+}
+
+export function applySmileLevelsSnapshot(
+  current: QuotesByExpiry,
+  msg: SmileLevelsSnapshotMessage | SmileLevelsPatchMessage
+): QuotesByExpiry {
+  const expiryKey = String(msg.expiry);
+  const existing = current[expiryKey];
+  const nextTs = Math.max(existing?.ts ?? Number.NEGATIVE_INFINITY, msg.ts);
+  const nextAtm = resolveMessageAtm(msg);
+  const nextAtmVersion = safeNumber(msg.atm_version);
+  const nextLastTradePrice = resolveMessageLastTradePrice(msg);
+  const existingAtmVersion = existing?.atmVersion ?? null;
+
+  const shouldFlashTradeUpdates = msg.type === "smile_levels_patch";
+  const pointsByStrike: Record<string, typeof msg.points[number]> = {
+    ...(existing?.pointsByStrike ?? {}),
+  };
+  for (const point of msg.points ?? []) {
+    const strikeKey = String(point.strike);
+    const existingPoint = pointsByStrike[strikeKey];
+    pointsByStrike[strikeKey] = mergeSmilePoint(
+      existingPoint,
+      point,
+      msg.ts,
+      shouldFlashTradeUpdates
+    );
+  }
+  applyPatchUpserts(
+    pointsByStrike,
+    "upserts" in msg ? msg.upserts : undefined,
+    msg.ts,
+    shouldFlashTradeUpdates
+  );
+  applyPatchDeletes(pointsByStrike, "deletes" in msg ? msg.deletes : undefined);
+
+  return {
+    ...current,
+    [expiryKey]: {
+      ts: nextTs,
+      atm: nextAtm ?? existing?.atm ?? null,
+      atmVersion: nextAtmVersion ?? existingAtmVersion,
+      lastTradePrice: nextLastTradePrice ?? existing?.lastTradePrice ?? null,
       label: msg.label ?? existing?.label,
       pointsByStrike,
     },
@@ -178,20 +766,26 @@ export function applySmilePointUpdate(
 ): QuotesByExpiry {
   const expiryKey = String(msg.expiry);
   const existing = current[expiryKey];
-
-  if (existing && msg.ts < existing.ts) {
-    return current;
-  }
+  const nextTs = Math.max(existing?.ts ?? Number.NEGATIVE_INFINITY, msg.ts);
+  const nextAtm = resolveMessageAtm(msg);
+  const nextAtmVersion = safeNumber(msg.atm_version);
+  const nextLastTradePrice = resolveMessageLastTradePrice(msg);
+  const existingAtmVersion = existing?.atmVersion ?? null;
 
   const nextPointsByStrike = { ...(existing?.pointsByStrike ?? {}) };
   for (const point of msg.points ?? []) {
-    nextPointsByStrike[String(point.strike)] = point;
+    const strikeKey = String(point.strike);
+    const existingPoint = nextPointsByStrike[strikeKey];
+    nextPointsByStrike[strikeKey] = mergeSmilePoint(existingPoint, point, msg.ts, true);
   }
 
   return {
     ...current,
     [expiryKey]: {
-      ts: msg.ts,
+      ts: nextTs,
+      atm: nextAtm ?? existing?.atm ?? null,
+      atmVersion: nextAtmVersion ?? existingAtmVersion,
+      lastTradePrice: nextLastTradePrice ?? existing?.lastTradePrice ?? null,
       label: msg.label ?? existing?.label,
       pointsByStrike: nextPointsByStrike,
     },
@@ -214,10 +808,251 @@ export function pruneQuotesBySnapshot(
   return next;
 }
 
-function downsampleScatter(points: ScatterRow[], maxPoints = 120) {
-  if (points.length <= maxPoints) return points;
-  const step = points.length / maxPoints;
-  return Array.from({ length: maxPoints }, (_, idx) => points[Math.floor(idx * step)]);
+function downsampleScatter(points: ScatterRow[]) {
+  return points;
+}
+
+function compareCurveRows(a: CurveRow, b: CurveRow) {
+  return a.x - b.x;
+}
+
+function compareScatterRows(a: ScatterRow, b: ScatterRow) {
+  if (a.x !== b.x) return a.x - b.x;
+  if (a.y !== b.y) return a.y - b.y;
+  if (a.strike !== b.strike) return a.strike - b.strike;
+  if (a.level !== b.level) return a.level - b.level;
+  return a.side.localeCompare(b.side);
+}
+
+type SmileDomainCacheEntry = {
+  xDomain: [number, number];
+  yDomain: [number, number];
+};
+
+const smileDomainCache = new Map<number, SmileDomainCacheEntry>();
+
+function smoothDomainTowards(
+  previous: [number, number],
+  next: [number, number],
+  shrinkBlend: number
+): [number, number] {
+  const previousRange = previous[1] - previous[0];
+  const nextRange = next[1] - next[0];
+  if (
+    !Number.isFinite(previousRange) ||
+    !Number.isFinite(nextRange) ||
+    previousRange <= 0 ||
+    nextRange <= 0
+  ) {
+    return next;
+  }
+
+  const rangeRatio = Math.max(previousRange, nextRange) / Math.min(previousRange, nextRange);
+  if (!Number.isFinite(rangeRatio) || rangeRatio > 4) {
+    // If ranges diverge too much, reset immediately.
+    return next;
+  }
+
+  const min = next[0] < previous[0]
+    ? next[0]
+    : previous[0] + (next[0] - previous[0]) * shrinkBlend;
+  const max = next[1] > previous[1]
+    ? next[1]
+    : previous[1] + (next[1] - previous[1]) * shrinkBlend;
+
+  return safeDomain(min, max, next);
+}
+
+function resolvePointLastTradeIv(point: SmilePoint): number | null {
+  // Trade dots should come from explicit trade IV only.
+  return resolvePointTradeInfo(point, false).iv;
+}
+
+function buildExpiryKeyCandidates(expiry: number) {
+  const candidates = new Set<string>([String(expiry)]);
+  const normalizedExpiry = safeNumber(expiry);
+  if (normalizedExpiry == null) {
+    return [...candidates];
+  }
+
+  if (Math.abs(normalizedExpiry) < 1e11) {
+    // seconds -> milliseconds
+    candidates.add(String(Math.round(normalizedExpiry * 1000)));
+  } else {
+    // milliseconds -> seconds
+    candidates.add(String(Math.round(normalizedExpiry / 1000)));
+  }
+
+  return [...candidates];
+}
+
+function resolveQuoteStateForSmile(smile: SviSmile, quotesByExpiry: QuotesByExpiry) {
+  for (const key of buildExpiryKeyCandidates(smile.expiry)) {
+    const byKey = quotesByExpiry[key];
+    if (byKey) return byKey;
+  }
+
+  const targetLabel = typeof smile.label === "string" ? smile.label.trim().toUpperCase() : "";
+  if (!targetLabel) return undefined;
+
+  let bestMatch: QuotesByExpiry[string] | undefined;
+  for (const quoteState of Object.values(quotesByExpiry)) {
+    const quoteLabel = typeof quoteState.label === "string" ? quoteState.label.trim().toUpperCase() : "";
+    if (quoteLabel !== targetLabel) continue;
+    if (!bestMatch || quoteState.ts > bestMatch.ts) {
+      bestMatch = quoteState;
+    }
+  }
+
+  return bestMatch;
+}
+
+function interpolateCurveIv(curveData: CurveRow[], targetX: number) {
+  const valid = curveData.filter(
+    (point): point is { x: number; y: number } => point.y != null && Number.isFinite(point.y)
+  );
+  if (valid.length === 0) return null;
+
+  if (targetX <= valid[0].x) return valid[0].y;
+  if (targetX >= valid[valid.length - 1].x) return valid[valid.length - 1].y;
+
+  for (let idx = 1; idx < valid.length; idx += 1) {
+    const right = valid[idx];
+    if (targetX > right.x) continue;
+
+    const left = valid[idx - 1];
+    const dx = right.x - left.x;
+    if (!Number.isFinite(dx) || dx === 0) return left.y;
+    const ratio = (targetX - left.x) / dx;
+    return left.y + (right.y - left.y) * ratio;
+  }
+
+  return valid[valid.length - 1].y;
+}
+
+function resolveBestBidIv(point: SmilePoint) {
+  const direct = normalizeIvForChart(point.best_bid_iv);
+  if (direct != null) return direct;
+
+  if (!Array.isArray(point.bid_levels) || point.bid_levels.length === 0) {
+    return null;
+  }
+
+  let best: number | null = null;
+  for (const level of point.bid_levels) {
+    const candidate = normalizeIvForChart(level.iv);
+    if (candidate == null) continue;
+    if (best == null || candidate > best) {
+      best = candidate;
+    }
+  }
+
+  return best;
+}
+
+function resolveBestAskIv(point: SmilePoint) {
+  const direct = normalizeIvForChart(point.best_ask_iv);
+  if (direct != null) return direct;
+
+  if (!Array.isArray(point.ask_levels) || point.ask_levels.length === 0) {
+    return null;
+  }
+
+  let best: number | null = null;
+  for (const level of point.ask_levels) {
+    const candidate = normalizeIvForChart(level.iv);
+    if (candidate == null) continue;
+    if (best == null || candidate < best) {
+      best = candidate;
+    }
+  }
+
+  return best;
+}
+
+export function buildSmileThroughMatrix(
+  snapshot: SviSurfaceSnapshot | null,
+  quotesByExpiry: QuotesByExpiry
+): SmileThroughMatrix {
+  if (!snapshot) {
+    return {
+      strikes: [],
+      rows: [],
+      maxThrough: 0,
+    };
+  }
+
+  const strikeSet = new Set<number>();
+  let maxThrough = 0;
+
+  const rows: SmileThroughRow[] = snapshot.smiles.map((smile) => {
+    const quoteState = resolveQuoteStateForSmile(smile, quotesByExpiry);
+    const quotePoints = quoteState ? Object.values(quoteState.pointsByStrike) : [];
+    const curveData = resolveSmileXValues(smile, snapshot)
+      .map((x, idx) => ({
+        x,
+        y: normalizeIvForChart(smile.vol?.[idx]),
+      }))
+      .sort(compareCurveRows);
+
+    const cellsByStrike: Record<string, SmileThroughCell> = {};
+    let activeCount = 0;
+
+    for (const point of quotePoints) {
+      const strike = safeNumber(point.strike);
+      const x = safeNumber(point.log_moneyness);
+      if (strike == null || x == null) continue;
+
+      strikeSet.add(strike);
+      const sviIv = interpolateCurveIv(curveData, x);
+      if (sviIv == null) continue;
+
+      const bestBidIv = resolveBestBidIv(point);
+      const bestAskIv = resolveBestAskIv(point);
+      const bidThrough = bestBidIv != null ? bestBidIv - sviIv : 0;
+      const askThrough = bestAskIv != null ? sviIv - bestAskIv : 0;
+
+      let side: ThroughMatrixSide = "neutral";
+      let throughValue = 0;
+      if (bidThrough > 0 || askThrough > 0) {
+        if (bidThrough >= askThrough) {
+          side = "bid";
+          throughValue = bidThrough;
+        } else {
+          side = "ask";
+          throughValue = askThrough;
+        }
+        activeCount += 1;
+        if (throughValue > maxThrough) {
+          maxThrough = throughValue;
+        }
+      }
+
+      cellsByStrike[String(strike)] = {
+        strike,
+        side,
+        throughValue,
+        sviIv,
+        bestBidIv,
+        bestAskIv,
+        bidThrough: Math.max(0, bidThrough),
+        askThrough: Math.max(0, askThrough),
+      };
+    }
+
+    return {
+      expiry: smile.expiry,
+      label: smile.label || formatExpiry(smile.expiry),
+      cellsByStrike,
+      activeCount,
+    };
+  });
+
+  return {
+    strikes: [...strikeSet].sort((a, b) => a - b),
+    rows,
+    maxThrough,
+  };
 }
 
 export function buildVarianceSeries(snapshot: SviSurfaceSnapshot | null): VarianceSeries[] {
@@ -264,66 +1099,164 @@ export function buildSmileChartRows(
   snapshot: SviSurfaceSnapshot | null,
   quotesByExpiry: QuotesByExpiry
 ): SmileChartRow[] {
-  if (!snapshot) return [];
+  if (!snapshot) {
+    smileDomainCache.clear();
+    return [];
+  }
 
-  return snapshot.smiles.map((smile) => {
-    const expiryKey = String(smile.expiry);
-    const quoteState = quotesByExpiry[expiryKey];
+  const activeExpiries = new Set<number>();
+  const rows: SmileChartRow[] = snapshot.smiles.map((smile): SmileChartRow => {
+    activeExpiries.add(smile.expiry);
+    const quoteState = resolveQuoteStateForSmile(smile, quotesByExpiry);
     const quotePoints = quoteState ? Object.values(quoteState.pointsByStrike) : [];
 
     const rawBidScatter: ScatterRow[] = quotePoints.flatMap((point) => {
       const x = safeNumber(point.log_moneyness);
       if (x == null) return [];
 
-      return (point.bid_levels ?? [])
-        .map((level, levelIdx) => {
-          const y = normalizeIvForChart(level.iv);
-          if (y == null) return null;
-          return {
-            x,
-            y,
-            strike: point.strike,
-            level: levelIdx,
-            side: "bid" as const,
-            size: level.size,
-          };
-        })
-        .filter(Boolean) as ScatterRow[];
+      const bidLevels = (point.bid_levels ?? []).filter((level) => !isTradeLevel(level));
+      if (bidLevels.length > 0) {
+        return bidLevels
+          .map((level, levelIdx) => {
+            const y = normalizeIvForChart(level.iv);
+            if (y == null) return null;
+            return {
+              x,
+              y,
+              strike: point.strike,
+              level: levelIdx,
+              side: "bid" as const,
+              size: level.size,
+            };
+          })
+          .filter(Boolean) as ScatterRow[];
+      }
+
+      const bestBidY = normalizeIvForChart(point.best_bid_iv);
+      if (bestBidY == null) return [];
+      return [
+        {
+          x,
+          y: bestBidY,
+          strike: point.strike,
+          level: 0,
+          side: "bid" as const,
+          size: null,
+        },
+      ];
     });
 
     const rawAskScatter: ScatterRow[] = quotePoints.flatMap((point) => {
       const x = safeNumber(point.log_moneyness);
       if (x == null) return [];
 
-      return (point.ask_levels ?? [])
-        .map((level, levelIdx) => {
-          const y = normalizeIvForChart(level.iv);
-          if (y == null) return null;
-          return {
-            x,
-            y,
-            strike: point.strike,
-            level: levelIdx,
-            side: "ask" as const,
-            size: level.size,
-          };
-        })
-        .filter(Boolean) as ScatterRow[];
+      const askLevels = (point.ask_levels ?? []).filter((level) => !isTradeLevel(level));
+      if (askLevels.length > 0) {
+        return askLevels
+          .map((level, levelIdx) => {
+            const y = normalizeIvForChart(level.iv);
+            if (y == null) return null;
+            return {
+              x,
+              y,
+              strike: point.strike,
+              level: levelIdx,
+              side: "ask" as const,
+              size: level.size,
+            };
+          })
+          .filter(Boolean) as ScatterRow[];
+      }
+
+      const bestAskY = normalizeIvForChart(point.best_ask_iv);
+      if (bestAskY == null) return [];
+      return [
+        {
+          x,
+          y: bestAskY,
+          strike: point.strike,
+          level: 0,
+          side: "ask" as const,
+          size: null,
+        },
+      ];
     });
 
-    const fullCurveData: CurveRow[] = resolveSmileXValues(smile, snapshot).map((x, idx) => ({
-      x,
-      y: normalizeIvForChart(smile.vol?.[idx]),
-    }));
+    const rawBestBidScatter: ScatterRow[] = quotePoints.flatMap((point) => {
+      const x = safeNumber(point.log_moneyness);
+      const y = normalizeIvForChart(point.best_bid_iv);
+      if (x == null || y == null) return [];
+
+      return [
+        {
+          x,
+          y,
+          strike: point.strike,
+          level: 0,
+          side: "bid" as const,
+          size: null,
+        },
+      ];
+    });
+
+    const rawBestAskScatter: ScatterRow[] = quotePoints.flatMap((point) => {
+      const x = safeNumber(point.log_moneyness);
+      const y = normalizeIvForChart(point.best_ask_iv);
+      if (x == null || y == null) return [];
+
+      return [
+        {
+          x,
+          y,
+          strike: point.strike,
+          level: 0,
+          side: "ask" as const,
+          size: null,
+        },
+      ];
+    });
+
+    const rawLastTradeScatter: ScatterRow[] = quotePoints.flatMap((point) => {
+      const x = safeNumber(point.log_moneyness);
+      const y = resolvePointLastTradeIv(point);
+      if (x == null || y == null) return [];
+      const tradeUpdateTs = safeNumber(point.last_trade_update_ts);
+      const flashUntilTs = safeNumber(point.last_trade_flash_until_ts);
+
+      return [
+        {
+          x,
+          y,
+          strike: point.strike,
+          level: 0,
+          side: "trade" as const,
+          size: null,
+          tradeUpdateTs,
+          flashUntilTs,
+        },
+      ];
+    });
+
+    const fullCurveData: CurveRow[] = resolveSmileXValues(smile, snapshot)
+      .map((x, idx) => ({
+        x,
+        y: normalizeIvForChart(smile.vol?.[idx]),
+      }))
+      .sort(compareCurveRows);
 
     if (fullCurveData.length === 0) {
       return {
         expiry: smile.expiry,
         label: smile.label || formatExpiry(smile.expiry),
         readableExpiry: formatExpiry(smile.expiry, smile.label),
+        atm: quoteState?.atm ?? null,
+        lastTradePrice: quoteState?.lastTradePrice ?? null,
         curveData: [],
         bidScatter: [],
         askScatter: [],
+        bestBidScatter: [],
+        bestAskScatter: [],
+        lastTradeScatter: [],
         quotePointCount: quotePoints.length,
         bidLevelCount: rawBidScatter.length,
         askLevelCount: rawAskScatter.length,
@@ -338,7 +1271,13 @@ export function buildSmileChartRows(
       };
     }
 
-    const quoteXs = [...rawBidScatter.map((point) => point.x), ...rawAskScatter.map((point) => point.x)];
+    const quoteXs = [
+      ...rawBidScatter.map((point) => point.x),
+      ...rawAskScatter.map((point) => point.x),
+      ...rawBestBidScatter.map((point) => point.x),
+      ...rawBestAskScatter.map((point) => point.x),
+      ...rawLastTradeScatter.map((point) => point.x),
+    ];
 
     let xMin: number;
     let xMax: number;
@@ -354,40 +1293,59 @@ export function buildSmileChartRows(
       xMax = snapUp(Math.max(...fullXs), 0.05);
     }
 
-    const curveData = fullCurveData.filter((point) => point.x >= xMin && point.x <= xMax);
-    const bidScatter = rawBidScatter.filter((point) => point.x >= xMin && point.x <= xMax);
-    const askScatter = rawAskScatter.filter((point) => point.x >= xMin && point.x <= xMax);
+    const curveDataWindowed = fullCurveData.filter((point) => point.x >= xMin && point.x <= xMax);
+    const curveData = fullCurveData;
+    const curveYSource = curveDataWindowed.length > 0 ? curveDataWindowed : fullCurveData;
+    const bidScatter = rawBidScatter.filter((point) => point.x >= xMin && point.x <= xMax).sort(compareScatterRows);
+    const askScatter = rawAskScatter.filter((point) => point.x >= xMin && point.x <= xMax).sort(compareScatterRows);
+    const bestBidScatter = rawBestBidScatter
+      .filter((point) => point.x >= xMin && point.x <= xMax)
+      .sort(compareScatterRows);
+    const bestAskScatter = rawBestAskScatter
+      .filter((point) => point.x >= xMin && point.x <= xMax)
+      .sort(compareScatterRows);
+    const lastTradeScatter = rawLastTradeScatter
+      .filter((point) => point.x >= xMin && point.x <= xMax)
+      .sort(compareScatterRows);
 
-    const curveYValues = curveData
+    const curveYValues = curveYSource
       .map((point) => point.y)
       .filter((value): value is number => value != null && Number.isFinite(value));
-
     const curveMinRaw = curveYValues.length ? Math.min(...curveYValues) : 0;
     const curveMaxRaw = curveYValues.length ? Math.max(...curveYValues) : 100;
     const yPad = Math.max((curveMaxRaw - curveMinRaw) * 0.15, 2);
     const yMin = snapDown(Math.max(0, curveMinRaw - yPad), 5);
     const yMax = snapUp(curveMaxRaw + yPad, 5);
 
-    const visibleYPad = Math.max((yMax - yMin) * 0.1, 2);
-    const visibleLower = yMin - visibleYPad;
-    const visibleUpper = yMax + visibleYPad;
-
-    const visibleBidScatter = bidScatter.filter(
-      (point) => point.y >= visibleLower && point.y <= visibleUpper
-    );
-    const visibleAskScatter = askScatter.filter(
-      (point) => point.y >= visibleLower && point.y <= visibleUpper
-    );
-
-    const renderedBidScatter = downsampleScatter(visibleBidScatter, MAX_BID_POINTS_PER_SMILE);
-    const renderedAskScatter = downsampleScatter(visibleAskScatter, MAX_ASK_POINTS_PER_SMILE);
+    const renderedBidScatter = downsampleScatter(bidScatter);
+    const renderedAskScatter = downsampleScatter(askScatter);
 
     const visibleSizes = [...renderedBidScatter, ...renderedAskScatter]
       .map((point) => point.size)
       .filter((size): size is number => size != null && Number.isFinite(size) && size > 0);
 
-    const xDomain = safeDomain(xMin, xMax, [-1, 1]);
-    const yDomain = safeDomain(yMin, yMax, [0, 100]);
+    const rawXDomain = safeDomain(xMin, xMax, [-1, 1]);
+    const rawYDomain = safeDomain(yMin, yMax, [0, 100]);
+    const cachedDomains = smileDomainCache.get(smile.expiry);
+
+    const smoothedXDomain = cachedDomains
+      ? smoothDomainTowards(cachedDomains.xDomain, rawXDomain, 0.18)
+      : rawXDomain;
+    const smoothedYDomain = cachedDomains
+      ? smoothDomainTowards(cachedDomains.yDomain, rawYDomain, 0.14)
+      : rawYDomain;
+
+    const xDomain = safeDomain(
+      snapDown(smoothedXDomain[0], 0.05),
+      snapUp(smoothedXDomain[1], 0.05),
+      rawXDomain
+    );
+    const yDomain = safeDomain(
+      snapDown(Math.max(0, smoothedYDomain[0]), 5),
+      snapUp(smoothedYDomain[1], 5),
+      rawYDomain
+    );
+    smileDomainCache.set(smile.expiry, { xDomain, yDomain });
 
     const xTickStep = chooseTickStep(xDomain[1] - xDomain[0], [0.05, 0.1, 0.2, 0.25, 0.5, 1], 6);
     const yTickStep = chooseTickStep(yDomain[1] - yDomain[0], [5, 10, 15, 20, 25, 50], 6);
@@ -396,14 +1354,20 @@ export function buildSmileChartRows(
       if (!best) return current;
       return Math.abs(current.x) < Math.abs(best.x) ? current : best;
     }, null);
+    const lastTradePrice = quoteState?.lastTradePrice ?? null;
 
     return {
       expiry: smile.expiry,
       label: smile.label || formatExpiry(smile.expiry),
       readableExpiry: formatExpiry(smile.expiry, smile.label),
+      atm: quoteState?.atm ?? null,
+      lastTradePrice,
       curveData,
       bidScatter: renderedBidScatter,
       askScatter: renderedAskScatter,
+      bestBidScatter,
+      bestAskScatter,
+      lastTradeScatter,
       quotePointCount: quotePoints.length,
       bidLevelCount: rawBidScatter.length,
       askLevelCount: rawAskScatter.length,
@@ -417,6 +1381,14 @@ export function buildSmileChartRows(
       atmX: atmPoint?.x ?? null,
     };
   });
+
+  for (const expiry of [...smileDomainCache.keys()]) {
+    if (!activeExpiries.has(expiry)) {
+      smileDomainCache.delete(expiry);
+    }
+  }
+
+  return rows;
 }
 
 export function makeXScale(domain: [number, number], width: number, margin: Margin) {

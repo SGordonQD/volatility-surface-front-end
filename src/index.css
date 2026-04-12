@@ -2,21 +2,21 @@
   font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
   line-height: 1.5;
   font-weight: 400;
-  color: #0f172a;
-  background:
-    radial-gradient(circle at top, rgba(125, 211, 252, 0.2), transparent 35%),
-    linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+  color: #d7e3f4;
+  background: #07111f;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  color-scheme: dark;
 }
 
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  background: #07111f;
 }
 
 #root {
@@ -26,4 +26,8 @@ body {
 a {
   color: inherit;
   text-decoration: inherit;
+}
+
+* {
+  box-sizing: border-box;
 }
