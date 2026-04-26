@@ -834,6 +834,7 @@ function renderSmileChartFrame({
 export function VarianceCanvasChart({
   height,
   xLabel,
+  yLabel = "variance",
   series,
   xDomain,
   yDomain,
@@ -842,9 +843,12 @@ export function VarianceCanvasChart({
   hoverX,
   onHoverX,
   onActivate,
+  xTickFormatter = (value: number) => value.toFixed(2),
+  yTickFormatter = (value: number) => value.toFixed(3),
 }: {
   height: number;
   xLabel: string;
+  yLabel?: string;
   series: VarianceSeries[];
   xDomain: [number, number];
   yDomain: [number, number];
@@ -853,6 +857,8 @@ export function VarianceCanvasChart({
   hoverX: number | null;
   onHoverX: (x: number | null) => void;
   onActivate?: () => void;
+  xTickFormatter?: (value: number) => string;
+  yTickFormatter?: (value: number) => string;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -905,14 +911,14 @@ export function VarianceCanvasChart({
       xScale,
       yScale,
       xLabel,
-      "variance",
-      (value) => value.toFixed(2),
-      (value) => value.toFixed(3)
+      yLabel,
+      xTickFormatter,
+      yTickFormatter
     );
 
     drawPlotBorder(ctx, width, height, margin);
     recordCanvasFrame("variance", startedAt);
-  }, [height, hoverX, isVisible, margin, series, width, xDomain, xLabel, xTicks, yDomain, yTicks]);
+  }, [height, hoverX, isVisible, margin, series, width, xDomain, xLabel, xTickFormatter, xTicks, yDomain, yLabel, yTickFormatter, yTicks]);
 
   const handleMove = useCallback(
     (event: MouseEvent<HTMLCanvasElement>) => {

@@ -370,6 +370,43 @@
   border-radius: var(--radius-pane);
 }
 
+.workspace-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 18px;
+  padding: 6px;
+  border: 1px solid rgba(42, 56, 76, 0.82);
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(15, 21, 33, 0.96), rgba(10, 16, 25, 0.96)),
+    var(--bg-elev-1);
+  box-shadow: var(--shadow-soft);
+}
+
+.workspace-tabs__button {
+  min-height: 34px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #98abc4;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.workspace-tabs__button:hover {
+  color: #edf3fb;
+}
+
+.workspace-tabs__button.is-active {
+  background: #3a2a15;
+  color: var(--accent-orange-soft);
+}
+
 .overview-card--expandable {
   transition:
     border-color 140ms ease,
@@ -1557,6 +1594,11 @@
 
   .overview-panels {
     gap: 14px;
+  }
+
+  .workspace-tabs {
+    width: 100%;
+    justify-content: center;
   }
 
   .trade-alert {

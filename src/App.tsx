@@ -15,6 +15,8 @@ import "./App.css";
 import { MiniSmileCanvasChart, SmileCanvasChart, VarianceCanvasChart } from "./components/CanvasCharts";
 import { Surface3DCanvas } from "./components/Surface3DCanvas";
 import {
+  buildGTestSeries,
+  buildGTestYDomain,
   buildSurfaceGrid,
   buildSmileThroughMatrix,
   buildSmileChartRows,
@@ -819,6 +821,12 @@ function formatSurfaceTimestamp(ts: number | null | undefined) {
   }
 }
 
+function formatGTestUnit(unit: string | null | undefined) {
+  if (!unit) return "—";
+  if (unit === "percent_probability_space") return "percent prob space";
+  return unit.replace(/_/g, " ");
+}
+
 function SmileAtmBadge({ atm, className = "" }: { atm: number | null | undefined; className?: string }) {
   const [flashClass, setFlashClass] = useState("");
   const previousAtmRef = useRef<number | null>(null);
@@ -1017,6 +1025,158 @@ function Surface3DPanel({
   );
 }
 
+function GTestPanel({
+  hoverX,
+  onHoverX,
+  scaleMode,
+  onScaleModeChange,
+  series,
+  snapshotKind,
+  snapshotCcy,
+  smileCount,
+  unit,
+  height,
+  xDomain,
+  xTicks,
+  yDomain,
+  yTicks,
+  expanded = false,
+  onExpand,
+  onCollapse,
+}: {
+  hoverX: number | null;
+  onHoverX: (x: number | null) => void;
+  scaleMode: "auto" | "focus" | "tight";
+  onScaleModeChange: (mode: "auto" | "focus" | "tight") => void;
+  series: ReturnType<typeof buildGTestSeries>;
+  snapshotKind: string;
+  snapshotCcy: string;
+  smileCount: number;
+  unit: string | null | undefined;
+  height: number;
+  xDomain: [number, number];
+  xTicks: number[];
+  yDomain: [number, number];
+  yTicks: number[];
+  expanded?: boolean;
+  onExpand?: () => void;
+  onCollapse?: () => void;
+}) {
+  const handleToggle = expanded ? onCollapse : onExpand;
+  return (
+    <div className={`overview-panel ${expanded ? "overview-panel--expanded" : ""}`.trim()} style={{ minWidth: 0 }}>
+      <Card className={`overview-card ${handleToggle ? "overview-card--expandable" : ""}`.trim()}>
+        <div className="panel-heading">
+          <h3 className="panel-heading__title">G-Test</h3>
+          <div className="panel-heading__controls">
+            <div className="scale-toggle" role="group" aria-label="G-test scale mode">
+              <button
+                type="button"
+                className={`scale-toggle__button ${scaleMode === "focus" ? "is-active" : ""}`}
+                onClick={() => onScaleModeChange("focus")}
+              >
+                -2 to +2
+              </button>
+              <button
+                type="button"
+                className={`scale-toggle__button ${scaleMode === "tight" ? "is-active" : ""}`}
+                onClick={() => onScaleModeChange("tight")}
+              >
+                -1 to +1
+              </button>
+              <button
+                type="button"
+                className={`scale-toggle__button ${scaleMode === "auto" ? "is-active" : ""}`}
+                onClick={() => onScaleModeChange("auto")}
+              >
+                Auto
+              </button>
+            </div>
+            <div className="panel-heading__meta">
+              {snapshotCcy} / {snapshotKind} / {smileCount} smiles / {formatGTestUnit(unit)}
+            </div>
+            {handleToggle ? (
+              <button
+                type="button"
+                className={`panel-expand-button ${expanded ? "is-active" : ""}`.trim()}
+                onClick={handleToggle}
+              >
+                {expanded ? "Collapse" : "Expand"}
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        <VarianceCanvasChart
+          height={height}
+          xLabel={snapshotKind === "x" ? "log-moneyness" : snapshotKind}
+          yLabel="g-test"
+          series={series}
+          xDomain={xDomain}
+          yDomain={yDomain}
+          xTicks={xTicks}
+          yTicks={yTicks}
+          hoverX={hoverX}
+          onHoverX={onHoverX}
+          onActivate={expanded ? undefined : onExpand}
+          yTickFormatter={(value) => value.toFixed(0)}
+        />
+      </Card>
+    </div>
+  );
+}
+
+function GTestSurfacePanel({
+  grid,
+  height,
+  smileCount,
+  snapshotTs,
+  unit,
+  expanded = false,
+  onExpand,
+  onCollapse,
+}: {
+  grid: ReturnType<typeof buildSurfaceGrid>;
+  height: number;
+  smileCount: number;
+  snapshotTs: number | null | undefined;
+  unit: string | null | undefined;
+  expanded?: boolean;
+  onExpand?: () => void;
+  onCollapse?: () => void;
+}) {
+  const timestampText = formatSurfaceTimestamp(snapshotTs);
+  const handleToggle = expanded ? onCollapse : onExpand;
+  return (
+    <div className={`overview-panel ${expanded ? "overview-panel--expanded" : ""}`.trim()} style={{ minWidth: 0 }}>
+      <Card className={`overview-card surface-3d-card ${handleToggle ? "overview-card--expandable" : ""}`.trim()}>
+        <div className="surface-3d-panel-head">
+          <div className="surface-3d-panel-copy">
+            <h3 className="surface-3d-panel-title">G-Test Surface</h3>
+            <div className="surface-3d-panel-subtitle">
+              Timestamp: {timestampText} / Unit: {formatGTestUnit(unit)}
+            </div>
+          </div>
+          <div className="surface-3d-panel-controls">
+            <div className="surface-3d-panel-meta">{grid?.rows.length ?? 0} of {smileCount} smiles</div>
+            {handleToggle ? (
+              <button
+                type="button"
+                className={`panel-expand-button ${expanded ? "is-active" : ""}`.trim()}
+                onClick={handleToggle}
+              >
+                {expanded ? "Collapse" : "Expand"}
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        <Surface3DCanvas grid={grid} height={height} mode="g_test" onActivate={expanded ? undefined : onExpand} />
+      </Card>
+    </div>
+  );
+}
+
 type RiskFlashDirection = "up" | "down";
 type RiskFlashState = { direction: RiskFlashDirection; until: number; nonce: number };
 type RiskFlashByCell = Record<string, RiskFlashState>;
@@ -1034,7 +1194,9 @@ type RrDaysSeries = {
 };
 type NodeXAxisMode = "node" | "strike" | "log_moneyness";
 type RiskRowMode = "expiry" | "tenor";
+type DashboardTabKey = "market" | "fit";
 type OverviewPanelKey = "variance" | "surface3d";
+type FitOverviewPanelKey = "g_test" | "g_test_surface";
 
 const RISK_FLASH_DURATION_MS = 760;
 const RISK_SERIES_COLORS = [
@@ -2808,10 +2970,13 @@ export default function App() {
   const overviewExpandedVarianceHeight = isPhoneLayout ? 300 : columnCount >= 3 ? 460 : 440;
   const overviewExpandedSurfaceHeight = isPhoneLayout ? 340 : columnCount >= 3 ? 540 : 500;
 
+  const [activeDashboardTab, setActiveDashboardTab] = useState<DashboardTabKey>("market");
   const [hoverX, setHoverX] = useState<number | null>(null);
   const [expandedExpiry, setExpandedExpiry] = useState<number | null>(null);
   const [expandedOverviewPanel, setExpandedOverviewPanel] = useState<OverviewPanelKey | null>(null);
+  const [expandedFitPanel, setExpandedFitPanel] = useState<FitOverviewPanelKey | null>(null);
   const [varianceScaleMode, setVarianceScaleMode] = useState<"auto" | "focus" | "tight">("focus");
+  const [gTestScaleMode, setGTestScaleMode] = useState<"auto" | "focus" | "tight">("focus");
   const [surface3DMode, setSurface3DMode] = useState<"vol" | "var">("vol");
   const [smileXAxisMode, setSmileXAxisMode] = useState<SmileXAxisMode>("log_moneyness");
   const [riskRowMode, setRiskRowMode] = useState<RiskRowMode>("expiry");
@@ -2856,13 +3021,26 @@ export default function App() {
   const deferredTenorByKey = useDeferredValue(tenorByKey);
 
   const varianceSeries = useMemo(() => buildVarianceSeries(snapshot), [snapshot]);
+  const gTestSeries = useMemo(() => buildGTestSeries(snapshot), [snapshot]);
   const surfaceGrid = useMemo(() => buildSurfaceGrid(snapshot), [snapshot]);
+  const gTestUnit = useMemo(
+    () =>
+      snapshot?.smiles.find((smile) => typeof smile.g_test_unit === "string")?.g_test_unit ??
+      surfaceGrid?.rows.find((row) => typeof row.g_test_unit === "string")?.g_test_unit ??
+      null,
+    [snapshot, surfaceGrid]
+  );
   const varianceAutoXDomain = useMemo(() => buildVarianceXDomain(snapshot), [snapshot]);
   const varianceXDomain = useMemo<[number, number]>(() => {
     if (varianceScaleMode === "focus") return [-2, 2];
     if (varianceScaleMode === "tight") return [-1, 1];
     return varianceAutoXDomain;
   }, [varianceAutoXDomain, varianceScaleMode]);
+  const gTestXDomain = useMemo<[number, number]>(() => {
+    if (gTestScaleMode === "focus") return [-2, 2];
+    if (gTestScaleMode === "tight") return [-1, 1];
+    return varianceAutoXDomain;
+  }, [gTestScaleMode, varianceAutoXDomain]);
   const varianceWindowedSeries = useMemo(
     () =>
       varianceSeries.map((item) => ({
@@ -2875,21 +3053,48 @@ export default function App() {
       })),
     [varianceSeries, varianceXDomain]
   );
+  const gTestWindowedSeries = useMemo(
+    () =>
+      gTestSeries.map((item) => ({
+        ...item,
+        data: item.data.map((point) =>
+          point.x >= gTestXDomain[0] && point.x <= gTestXDomain[1]
+            ? point
+            : { ...point, y: null }
+        ),
+      })),
+    [gTestSeries, gTestXDomain]
+  );
   const varianceRawYDomain = useMemo(
     () => buildVarianceYDomain(varianceWindowedSeries),
     [varianceWindowedSeries]
   );
+  const gTestRawYDomain = useMemo(
+    () => buildGTestYDomain(gTestWindowedSeries),
+    [gTestWindowedSeries]
+  );
   const [varianceYDomain, setVarianceYDomain] = useState<[number, number]>(varianceRawYDomain);
+  const [gTestYDomain, setGTestYDomain] = useState<[number, number]>(gTestRawYDomain);
   useEffect(() => {
     const frameId = window.requestAnimationFrame(() => {
       setVarianceYDomain((current) => smoothVarianceDomain(current, varianceRawYDomain));
     });
     return () => window.cancelAnimationFrame(frameId);
   }, [varianceRawYDomain]);
+  useEffect(() => {
+    const frameId = window.requestAnimationFrame(() => {
+      setGTestYDomain((current) => smoothVarianceDomain(current, gTestRawYDomain));
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [gTestRawYDomain]);
   const varianceXTicks = useMemo(() => {
     const step = chooseTickStep(varianceXDomain[1] - varianceXDomain[0], [0.05, 0.1, 0.2, 0.25, 0.5, 1], 7);
     return buildTicks(varianceXDomain[0], varianceXDomain[1], step);
   }, [varianceXDomain]);
+  const gTestXTicks = useMemo(() => {
+    const step = chooseTickStep(gTestXDomain[1] - gTestXDomain[0], [0.05, 0.1, 0.2, 0.25, 0.5, 1], 7);
+    return buildTicks(gTestXDomain[0], gTestXDomain[1], step);
+  }, [gTestXDomain]);
   const varianceYTicks = useMemo(() => {
     const step = chooseTickStep(
       varianceYDomain[1] - varianceYDomain[0],
@@ -2898,6 +3103,14 @@ export default function App() {
     );
     return buildTicks(varianceYDomain[0], varianceYDomain[1], step);
   }, [varianceYDomain]);
+  const gTestYTicks = useMemo(() => {
+    const step = chooseTickStep(
+      gTestYDomain[1] - gTestYDomain[0],
+      [1, 2, 5, 10, 20, 25, 50, 100],
+      6
+    );
+    return buildTicks(gTestYDomain[0], gTestYDomain[1], step);
+  }, [gTestYDomain]);
 
   const smileChartRows = useMemo(() => buildSmileChartRows(snapshot, quotesByExpiry), [quotesByExpiry, snapshot]);
   const smileDisplayRows = useMemo(
@@ -2937,6 +3150,14 @@ export default function App() {
     });
     return () => window.cancelAnimationFrame(frameId);
   }, [canSplitOverviewPanels, expandedOverviewPanel]);
+
+  useEffect(() => {
+    if (canSplitOverviewPanels || expandedFitPanel == null) return;
+    const frameId = window.requestAnimationFrame(() => {
+      setExpandedFitPanel(null);
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [canSplitOverviewPanels, expandedFitPanel]);
 
   useEffect(() => {
     let latestTradeEvent:
@@ -3022,6 +3243,12 @@ export default function App() {
   const showSurface3DPanel = !varianceExpanded;
   const varianceHeight = varianceExpanded ? overviewExpandedVarianceHeight : overviewCompactVarianceHeight;
   const surface3DHeight = surface3DExpanded ? overviewExpandedSurfaceHeight : overviewCompactSurfaceHeight;
+  const gTestExpanded = expandedFitPanel === "g_test";
+  const gTestSurfaceExpanded = expandedFitPanel === "g_test_surface";
+  const showGTestPanel = !gTestSurfaceExpanded;
+  const showGTestSurfacePanel = !gTestExpanded;
+  const gTestHeight = gTestExpanded ? overviewExpandedVarianceHeight : overviewCompactVarianceHeight;
+  const gTestSurfaceHeight = gTestSurfaceExpanded ? overviewExpandedSurfaceHeight : overviewCompactSurfaceHeight;
 
   return (
     <div className="app-shell">
@@ -3042,227 +3269,295 @@ export default function App() {
 
       <div ref={outerRef} className="app-layout">
         <div className="app-layout__inner">
-          <div
-            className={`overview-panels${canSplitOverviewPanels ? " overview-panels--split" : ""}${expandedOverviewPanel ? " overview-panels--spotlight" : ""}`.trim()}
-          >
-            {showVariancePanel ? (
-              <VariancePanel
-                hoverX={hoverX}
-                onHoverX={setHoverX}
-                scaleMode={varianceScaleMode}
-                onScaleModeChange={setVarianceScaleMode}
-                series={varianceSeries}
-                snapshotKind={snapshot?.x_axis?.kind ?? "x"}
-                snapshotCcy={snapshot?.ccy ?? "—"}
-                smileCount={snapshot?.smiles.length ?? 0}
-                varHeight={varianceHeight}
-                xDomain={varianceXDomain}
-                xTicks={varianceXTicks}
-                yDomain={varianceYDomain}
-                yTicks={varianceYTicks}
-                expanded={varianceExpanded}
-                onExpand={canSplitOverviewPanels ? () => setExpandedOverviewPanel("variance") : undefined}
-                onCollapse={varianceExpanded ? () => setExpandedOverviewPanel(null) : undefined}
-              />
-            ) : null}
-
-            {showSurface3DPanel ? (
-              <Surface3DPanel
-              grid={surfaceGrid}
-              mode={surface3DMode}
-              onModeChange={setSurface3DMode}
-              height={surface3DHeight}
-              smileCount={snapshot?.smiles.length ?? 0}
-              snapshotTs={snapshot?.ts}
-              expanded={surface3DExpanded}
-                onExpand={canSplitOverviewPanels ? () => setExpandedOverviewPanel("surface3d") : undefined}
-                onCollapse={surface3DExpanded ? () => setExpandedOverviewPanel(null) : undefined}
-              />
-            ) : null}
+          <div className="workspace-tabs" role="tablist" aria-label="Dashboard views">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeDashboardTab === "market"}
+              className={`workspace-tabs__button ${activeDashboardTab === "market" ? "is-active" : ""}`.trim()}
+              onClick={() => setActiveDashboardTab("market")}
+            >
+              Market
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeDashboardTab === "fit"}
+              className={`workspace-tabs__button ${activeDashboardTab === "fit" ? "is-active" : ""}`.trim()}
+              onClick={() => setActiveDashboardTab("fit")}
+            >
+              Fit
+            </button>
           </div>
 
-          <RiskReversalNodesPanel
-            riskReversalByExpiry={riskReversalByExpiry}
-            tenorByKey={deferredTenorByKey}
-            rowMode={riskRowMode}
-            onRowModeChange={setRiskRowMode}
-            quotesByExpiry={quotesByExpiry}
-          />
-
-          <FlyMetricsPanel
-            flyByExpiry={deferredFlyByExpiry}
-            tenorByKey={deferredTenorByKey}
-            rowMode={riskRowMode}
-            onRowModeChange={setRiskRowMode}
-            quotesByExpiry={deferredQuotesByExpiry}
-          />
-
-          <ThroughMatrixPanel matrix={throughMatrix} />
-
-          <div className="smile-section__header">
-            <h2 className="smile-section__title">Smile Matrix</h2>
-            <div className="smile-section__controls">
-              <div className="scale-toggle" role="group" aria-label="Smile x-axis mode">
-                <button
-                  type="button"
-                  className={`scale-toggle__button ${smileXAxisMode === "log_moneyness" ? "is-active" : ""}`}
-                  onClick={() => setSmileXAxisMode("log_moneyness")}
-                >
-                  Log-mny
-                </button>
-                <button
-                  type="button"
-                  className={`scale-toggle__button ${smileXAxisMode === "strike" ? "is-active" : ""}`}
-                  onClick={() => setSmileXAxisMode("strike")}
-                >
-                  Strike
-                </button>
-              </div>
-              <div className="scale-toggle" role="group" aria-label="Smile exchange visibility">
-                <button
-                  type="button"
-                  className={`scale-toggle__button ${exchangeVisibility.deribit ? "is-active" : ""}`}
-                  onClick={() =>
-                    setExchangeVisibility((previous) => ({
-                      ...previous,
-                      deribit: !previous.deribit,
-                    }))
-                  }
-                >
-                  Deribit
-                </button>
-                <button
-                  type="button"
-                  className={`scale-toggle__button ${exchangeVisibility.okx ? "is-active" : ""}`}
-                  onClick={() =>
-                    setExchangeVisibility((previous) => ({
-                      ...previous,
-                      okx: !previous.okx,
-                    }))
-                  }
-                >
-                  OKX
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {smileDisplayRows.length === 0 ? (
-            <Card>
-              <div className="empty-state">No volatility smile data yet.</div>
-            </Card>
-          ) : expandedRow ? (
-            <div className="smile-focus-layout">
-              <aside className="smile-queue">
-                <div className="smile-queue__header">Queue</div>
-                <div className="smile-queue__list">
-                  {queuedRows.map((row) => (
-                    <button
-                      key={row.expiry}
-                      type="button"
-                      className="smile-queue__item"
-                      onClick={() => setExpandedExpiry(row.expiry)}
-                    >
-                      <MiniSmileCanvasChart row={row} lineColor={FITTED_CURVE_COLOR} />
-                      <div className="smile-queue__title-row">
-                        <div className="smile-queue__title">{row.label}</div>
-                        <SmileExchangeBadges hasDeribit={row.hasDeribit} hasOkx={row.hasOkx} />
-                      </div>
-                      <SmileAtmBadge atm={row.atm} className="smile-atm--queue" />
-                    </button>
-                  ))}
-                </div>
-              </aside>
-
-              <div className="smile-focus-main">
-                <Card className="smile-card smile-card--expanded">
-                  <div className="smile-card__header smile-card__header--expanded">
-                    <div className="smile-card__title-row">
-                      <div>
-                        <div className="smile-card__title-with-badges">
-                          <div className="smile-card__title smile-card__title--expanded">{expandedRow.label}</div>
-                          <SmileExchangeBadges
-                            hasDeribit={expandedRow.hasDeribit}
-                            hasOkx={expandedRow.hasOkx}
-                          />
-                        </div>
-                        <SmileAtmBadge atm={expandedRow.atm} />
-                      </div>
-                      <button
-                        type="button"
-                        className="smile-focus__close"
-                        onClick={() => setExpandedExpiry(null)}
-                      >
-                        Back to matrix
-                      </button>
-                    </div>
-                  </div>
-
-                  <SmileCanvasChart
-                    key={`smile-expanded-${expandedRow.expiry}-${smileXAxisMode}-${exchangeVisibilityKey}`}
-                    height={focusChartHeight}
-                    xLabel={smileXAxisMode === "strike" ? "strike" : "log-moneyness"}
-                    row={expandedRow}
-                    lineColor={FITTED_CURVE_COLOR}
+          {activeDashboardTab === "market" ? (
+            <>
+              <div
+                className={`overview-panels${canSplitOverviewPanels ? " overview-panels--split" : ""}${expandedOverviewPanel ? " overview-panels--spotlight" : ""}`.trim()}
+              >
+                {showVariancePanel ? (
+                  <VariancePanel
                     hoverX={hoverX}
                     onHoverX={setHoverX}
+                    scaleMode={varianceScaleMode}
+                    onScaleModeChange={setVarianceScaleMode}
+                    series={varianceSeries}
+                    snapshotKind={snapshot?.x_axis?.kind ?? "x"}
+                    snapshotCcy={snapshot?.ccy ?? "—"}
+                    smileCount={snapshot?.smiles.length ?? 0}
+                    varHeight={varianceHeight}
+                    xDomain={varianceXDomain}
+                    xTicks={varianceXTicks}
+                    yDomain={varianceYDomain}
+                    yTicks={varianceYTicks}
+                    expanded={varianceExpanded}
+                    onExpand={canSplitOverviewPanels ? () => setExpandedOverviewPanel("variance") : undefined}
+                    onCollapse={varianceExpanded ? () => setExpandedOverviewPanel(null) : undefined}
                   />
-                </Card>
+                ) : null}
+
+                {showSurface3DPanel ? (
+                  <Surface3DPanel
+                    grid={surfaceGrid}
+                    mode={surface3DMode}
+                    onModeChange={setSurface3DMode}
+                    height={surface3DHeight}
+                    smileCount={snapshot?.smiles.length ?? 0}
+                    snapshotTs={snapshot?.ts}
+                    expanded={surface3DExpanded}
+                    onExpand={canSplitOverviewPanels ? () => setExpandedOverviewPanel("surface3d") : undefined}
+                    onCollapse={surface3DExpanded ? () => setExpandedOverviewPanel(null) : undefined}
+                  />
+                ) : null}
               </div>
-            </div>
+
+              <RiskReversalNodesPanel
+                riskReversalByExpiry={riskReversalByExpiry}
+                tenorByKey={deferredTenorByKey}
+                rowMode={riskRowMode}
+                onRowModeChange={setRiskRowMode}
+                quotesByExpiry={quotesByExpiry}
+              />
+
+              <FlyMetricsPanel
+                flyByExpiry={deferredFlyByExpiry}
+                tenorByKey={deferredTenorByKey}
+                rowMode={riskRowMode}
+                onRowModeChange={setRiskRowMode}
+                quotesByExpiry={deferredQuotesByExpiry}
+              />
+
+              <ThroughMatrixPanel matrix={throughMatrix} />
+
+              <div className="smile-section__header">
+                <h2 className="smile-section__title">Smile Matrix</h2>
+                <div className="smile-section__controls">
+                  <div className="scale-toggle" role="group" aria-label="Smile x-axis mode">
+                    <button
+                      type="button"
+                      className={`scale-toggle__button ${smileXAxisMode === "log_moneyness" ? "is-active" : ""}`}
+                      onClick={() => setSmileXAxisMode("log_moneyness")}
+                    >
+                      Log-mny
+                    </button>
+                    <button
+                      type="button"
+                      className={`scale-toggle__button ${smileXAxisMode === "strike" ? "is-active" : ""}`}
+                      onClick={() => setSmileXAxisMode("strike")}
+                    >
+                      Strike
+                    </button>
+                  </div>
+                  <div className="scale-toggle" role="group" aria-label="Smile exchange visibility">
+                    <button
+                      type="button"
+                      className={`scale-toggle__button ${exchangeVisibility.deribit ? "is-active" : ""}`}
+                      onClick={() =>
+                        setExchangeVisibility((previous) => ({
+                          ...previous,
+                          deribit: !previous.deribit,
+                        }))
+                      }
+                    >
+                      Deribit
+                    </button>
+                    <button
+                      type="button"
+                      className={`scale-toggle__button ${exchangeVisibility.okx ? "is-active" : ""}`}
+                      onClick={() =>
+                        setExchangeVisibility((previous) => ({
+                          ...previous,
+                          okx: !previous.okx,
+                        }))
+                      }
+                    >
+                      OKX
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </>
           ) : (
-            <div ref={scrollRef} className="smile-grid-scroll">
-              <div style={{ height: topSpacer }} />
+            <div
+              className={`overview-panels${canSplitOverviewPanels ? " overview-panels--split" : ""}${expandedFitPanel ? " overview-panels--spotlight" : ""}`.trim()}
+            >
+              {showGTestPanel ? (
+                <GTestPanel
+                  hoverX={hoverX}
+                  onHoverX={setHoverX}
+                  scaleMode={gTestScaleMode}
+                  onScaleModeChange={setGTestScaleMode}
+                  series={gTestSeries}
+                  snapshotKind={snapshot?.x_axis?.kind ?? "x"}
+                  snapshotCcy={snapshot?.ccy ?? "—"}
+                  smileCount={snapshot?.smiles.length ?? 0}
+                  unit={gTestUnit}
+                  height={gTestHeight}
+                  xDomain={gTestXDomain}
+                  xTicks={gTestXTicks}
+                  yDomain={gTestYDomain}
+                  yTicks={gTestYTicks}
+                  expanded={gTestExpanded}
+                  onExpand={canSplitOverviewPanels ? () => setExpandedFitPanel("g_test") : undefined}
+                  onCollapse={gTestExpanded ? () => setExpandedFitPanel(null) : undefined}
+                />
+              ) : null}
 
-              <div
-                className="smile-grid"
-                style={{
-                  gridTemplateColumns:
-                    columnCount >= 3
-                      ? "repeat(3, minmax(0, 1fr))"
-                      : columnCount === 2
-                        ? "repeat(2, minmax(0, 1fr))"
-                        : "minmax(0, 1fr)",
-                }}
-              >
-                {visibleRows.map((row) => {
-                  return (
-                    <div key={row.expiry} style={{ minWidth: 0 }}>
-                      <button
-                        type="button"
-                        className="smile-card-button"
-                        onClick={() => setExpandedExpiry(row.expiry)}
-                      >
-                        <Card className="smile-card">
-                          <div className="smile-card__header">
-                          <div className="smile-card__title-row">
-                            <div className="smile-card__title-with-badges">
-                              <div className="smile-card__title">{row.label}</div>
-                              <SmileExchangeBadges hasDeribit={row.hasDeribit} hasOkx={row.hasOkx} />
-                            </div>
-                            <SmileAtmBadge atm={row.atm} className="smile-atm--inline" />
-                          </div>
-                          </div>
-
-                          <SmileCanvasChart
-                            key={`smile-grid-${row.expiry}-${smileXAxisMode}-${exchangeVisibilityKey}`}
-                            height={chartHeight}
-                            xLabel={smileXAxisMode === "strike" ? "strike" : "log-moneyness"}
-                            row={row}
-                            lineColor={FITTED_CURVE_COLOR}
-                            hoverX={hoverX}
-                            onHoverX={setHoverX}
-                          />
-                        </Card>
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div style={{ height: bottomSpacer }} />
+              {showGTestSurfacePanel ? (
+                <GTestSurfacePanel
+                  grid={surfaceGrid}
+                  height={gTestSurfaceHeight}
+                  smileCount={snapshot?.smiles.length ?? 0}
+                  snapshotTs={snapshot?.ts}
+                  unit={gTestUnit}
+                  expanded={gTestSurfaceExpanded}
+                  onExpand={canSplitOverviewPanels ? () => setExpandedFitPanel("g_test_surface") : undefined}
+                  onCollapse={gTestSurfaceExpanded ? () => setExpandedFitPanel(null) : undefined}
+                />
+              ) : null}
             </div>
           )}
+
+          {activeDashboardTab === "market" ? (
+            <>
+              {smileDisplayRows.length === 0 ? (
+                <Card>
+                  <div className="empty-state">No volatility smile data yet.</div>
+                </Card>
+              ) : expandedRow ? (
+                <div className="smile-focus-layout">
+                  <aside className="smile-queue">
+                    <div className="smile-queue__header">Queue</div>
+                    <div className="smile-queue__list">
+                      {queuedRows.map((row) => (
+                        <button
+                          key={row.expiry}
+                          type="button"
+                          className="smile-queue__item"
+                          onClick={() => setExpandedExpiry(row.expiry)}
+                        >
+                          <MiniSmileCanvasChart row={row} lineColor={FITTED_CURVE_COLOR} />
+                          <div className="smile-queue__title-row">
+                            <div className="smile-queue__title">{row.label}</div>
+                            <SmileExchangeBadges hasDeribit={row.hasDeribit} hasOkx={row.hasOkx} />
+                          </div>
+                          <SmileAtmBadge atm={row.atm} className="smile-atm--queue" />
+                        </button>
+                      ))}
+                    </div>
+                  </aside>
+
+                  <div className="smile-focus-main">
+                    <Card className="smile-card smile-card--expanded">
+                      <div className="smile-card__header smile-card__header--expanded">
+                        <div className="smile-card__title-row">
+                          <div>
+                            <div className="smile-card__title-with-badges">
+                              <div className="smile-card__title smile-card__title--expanded">{expandedRow.label}</div>
+                              <SmileExchangeBadges
+                                hasDeribit={expandedRow.hasDeribit}
+                                hasOkx={expandedRow.hasOkx}
+                              />
+                            </div>
+                            <SmileAtmBadge atm={expandedRow.atm} />
+                          </div>
+                          <button
+                            type="button"
+                            className="smile-focus__close"
+                            onClick={() => setExpandedExpiry(null)}
+                          >
+                            Back to matrix
+                          </button>
+                        </div>
+                      </div>
+
+                      <SmileCanvasChart
+                        key={`smile-expanded-${expandedRow.expiry}-${smileXAxisMode}-${exchangeVisibilityKey}`}
+                        height={focusChartHeight}
+                        xLabel={smileXAxisMode === "strike" ? "strike" : "log-moneyness"}
+                        row={expandedRow}
+                        lineColor={FITTED_CURVE_COLOR}
+                        hoverX={hoverX}
+                        onHoverX={setHoverX}
+                      />
+                    </Card>
+                  </div>
+                </div>
+              ) : (
+                <div ref={scrollRef} className="smile-grid-scroll">
+                  <div style={{ height: topSpacer }} />
+
+                  <div
+                    className="smile-grid"
+                    style={{
+                      gridTemplateColumns:
+                        columnCount >= 3
+                          ? "repeat(3, minmax(0, 1fr))"
+                          : columnCount === 2
+                            ? "repeat(2, minmax(0, 1fr))"
+                            : "minmax(0, 1fr)",
+                    }}
+                  >
+                    {visibleRows.map((row) => {
+                      return (
+                        <div key={row.expiry} style={{ minWidth: 0 }}>
+                          <button
+                            type="button"
+                            className="smile-card-button"
+                            onClick={() => setExpandedExpiry(row.expiry)}
+                          >
+                            <Card className="smile-card">
+                              <div className="smile-card__header">
+                              <div className="smile-card__title-row">
+                                <div className="smile-card__title-with-badges">
+                                  <div className="smile-card__title">{row.label}</div>
+                                  <SmileExchangeBadges hasDeribit={row.hasDeribit} hasOkx={row.hasOkx} />
+                                </div>
+                                <SmileAtmBadge atm={row.atm} className="smile-atm--inline" />
+                              </div>
+                              </div>
+
+                              <SmileCanvasChart
+                                key={`smile-grid-${row.expiry}-${smileXAxisMode}-${exchangeVisibilityKey}`}
+                                height={chartHeight}
+                                xLabel={smileXAxisMode === "strike" ? "strike" : "log-moneyness"}
+                                row={row}
+                                lineColor={FITTED_CURVE_COLOR}
+                                hoverX={hoverX}
+                                onHoverX={setHoverX}
+                              />
+                            </Card>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div style={{ height: bottomSpacer }} />
+                </div>
+              )}
+            </>
+          ) : null}
         </div>
       </div>
       <RuntimeDebugPanel

@@ -468,6 +468,11 @@ function mergeSurfaceGrid(
       expiry,
       var: Array.isArray(row.var) ? row.var : previousRow?.var ?? [],
       vol: Array.isArray(row.vol) ? row.vol : previousRow?.vol ?? [],
+      g_test: Array.isArray(row.g_test) ? row.g_test : previousRow?.g_test ?? [],
+      g_test_unit:
+        typeof row.g_test_unit === "string"
+          ? row.g_test_unit
+          : previousRow?.g_test_unit,
     });
   }
 
@@ -499,6 +504,11 @@ function mergeSurfaceSmile(
     x_values: nextSmilePatch.x_values ?? previousSmile?.x_values,
     var: Array.isArray(nextSmilePatch.var) ? nextSmilePatch.var : previousSmile?.var ?? [],
     vol: Array.isArray(nextSmilePatch.vol) ? nextSmilePatch.vol : previousSmile?.vol ?? [],
+    g_test: Array.isArray(nextSmilePatch.g_test) ? nextSmilePatch.g_test : previousSmile?.g_test ?? [],
+    g_test_unit:
+      typeof nextSmilePatch.g_test_unit === "string"
+        ? nextSmilePatch.g_test_unit
+        : previousSmile?.g_test_unit,
   };
 }
 

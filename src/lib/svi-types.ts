@@ -24,6 +24,8 @@ export type SviSmile = {
   };
   var: number[];
   vol?: Array<number | null>;
+  g_test?: Array<number | null>;
+  g_test_unit?: string;
   x_axis?: SmileXAxis;
   x_values?: number[];
 };
@@ -36,6 +38,8 @@ export type SviSurfaceGridRow = {
   atm_version?: number | null;
   var: Array<number | null>;
   vol: Array<number | null>;
+  g_test?: Array<number | null>;
+  g_test_unit?: string;
 };
 
 export type SviSurfaceGrid = {

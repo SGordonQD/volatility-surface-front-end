@@ -1501,11 +1501,15 @@ function sampleEvenly(values: number[], maxPoints: number) {
   return sampled;
 }
 
-export function buildVarianceSeries(snapshot: SviSurfaceSnapshot | null): VarianceSeries[] {
+function buildCurveSeries(
+  snapshot: SviSurfaceSnapshot | null,
+  selector: (smile: SviSmile) => Array<number | null> | undefined
+): VarianceSeries[] {
   if (!snapshot) return [];
 
   return snapshot.smiles.map((smile, idx) => {
     const xValues = resolveSmileXValues(smile, snapshot);
+    const curveValues = selector(smile) ?? [];
 
     return {
       key: String(smile.expiry),
@@ -1513,10 +1517,36 @@ export function buildVarianceSeries(snapshot: SviSurfaceSnapshot | null): Varian
       color: palette[idx % palette.length],
       data: xValues.map((x, pointIdx) => ({
         x,
-        y: smile.var?.[pointIdx] ?? null,
+        y: curveValues[pointIdx] ?? null,
       })),
     };
   });
+}
+
+function buildCurveSeriesYDomain(
+  series: VarianceSeries[],
+  fallback: [number, number],
+  minPad: number,
+  snapStep: number
+): [number, number] {
+  const ys = series.flatMap((item) =>
+    item.data.map((point) => point.y).filter((value): value is number => value != null)
+  );
+
+  if (ys.length === 0) return fallback;
+
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const pad = Math.max((maxY - minY) * 0.12, minPad);
+  return safeDomain(snapDown(minY - pad, snapStep), snapUp(maxY + pad, snapStep), fallback);
+}
+
+export function buildVarianceSeries(snapshot: SviSurfaceSnapshot | null): VarianceSeries[] {
+  return buildCurveSeries(snapshot, (smile) => smile.var);
+}
+
+export function buildGTestSeries(snapshot: SviSurfaceSnapshot | null): VarianceSeries[] {
+  return buildCurveSeries(snapshot, (smile) => smile.g_test);
 }
 
 export function buildVarianceXDomain(snapshot: SviSurfaceSnapshot | null): [number, number] {
@@ -1529,16 +1559,11 @@ export function buildVarianceXDomain(snapshot: SviSurfaceSnapshot | null): [numb
 }
 
 export function buildVarianceYDomain(series: VarianceSeries[]): [number, number] {
-  const ys = series.flatMap((item) =>
-    item.data.map((point) => point.y).filter((value): value is number => value != null)
-  );
+  return buildCurveSeriesYDomain(series, [0, 1], 0.001, 0.005);
+}
 
-  if (ys.length === 0) return [0, 1];
-
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-  const pad = Math.max((maxY - minY) * 0.12, 0.001);
-  return safeDomain(snapDown(minY - pad, 0.005), snapUp(maxY + pad, 0.005), [0, 1]);
+export function buildGTestYDomain(series: VarianceSeries[]): [number, number] {
+  return buildCurveSeriesYDomain(series, [0, 100], 1, 1);
 }
 
 function buildSurfaceGridFallbackXValues() {
@@ -1632,6 +1657,8 @@ export function buildSurfaceGrid(snapshot: SviSurfaceSnapshot | null): SviSurfac
       atm_version: safeNumber(smile.atm_version),
       var: interpolateSeriesToGrid(smileXValues, smile.var ?? [], xValues),
       vol: interpolateSeriesToGrid(smileXValues, smile.vol ?? [], xValues),
+      g_test: interpolateSeriesToGrid(smileXValues, smile.g_test ?? [], xValues),
+      g_test_unit: smile.g_test_unit ?? "percent_probability_space",
     };
   });
 

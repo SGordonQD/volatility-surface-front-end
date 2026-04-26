@@ -39,7 +39,7 @@ const SURFACE_PALETTE = [
 
 type PaletteStop = (typeof SURFACE_PALETTE)[number];
 
-type SurfaceMode = "vol" | "var";
+type SurfaceMode = "vol" | "var" | "g_test";
 
 type Surface3DCanvasProps = {
   grid: SviSurfaceGrid | null;
@@ -226,7 +226,12 @@ function prepareSurface(grid: SviSurfaceGrid | null, mode: SurfaceMode): Prepare
           ? rawDay * 365
           : rawDay
         : rowIndex + 1;
-    const sourceSeries = mode === "vol" ? row.vol : row.var;
+    const sourceSeries =
+      mode === "vol"
+        ? row.vol
+        : mode === "g_test"
+          ? row.g_test
+          : row.var;
 
     const points = grid.x_values.map((xValue, columnIndex) => {
       const x = safeNumber(xValue) ?? 0;
@@ -305,7 +310,12 @@ function prepareSurface(grid: SviSurfaceGrid | null, mode: SurfaceMode): Prepare
       value: buildTicks(valueMin, valueMax, 6),
     },
     useStrikeAxis,
-    zLabel: mode === "vol" ? "Implied Vol (%)" : "Total Variance",
+    zLabel:
+      mode === "vol"
+        ? "Implied Vol (%)"
+        : mode === "g_test"
+          ? "G-Test (%)"
+          : "Total Variance",
   };
 }
 
