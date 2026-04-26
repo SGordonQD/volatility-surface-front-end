@@ -702,6 +702,56 @@ function drawReferenceLine(
   ctx.restore();
 }
 
+function drawHorizontalReferenceLine(
+  ctx: CanvasRenderingContext2D,
+  y: number,
+  width: number,
+  margin: Margin,
+  color: string,
+  dash = [4, 4],
+  alpha = 1
+) {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.globalAlpha = alpha;
+  ctx.lineWidth = 1;
+  ctx.setLineDash(dash);
+  ctx.beginPath();
+  ctx.moveTo(margin.left, y);
+  ctx.lineTo(width - margin.right, y);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawNegativeYRegion(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  margin: Margin,
+  yDomain: [number, number],
+  yScale: (y: number) => number
+) {
+  if (yDomain[0] >= 0) return;
+
+  const zeroY = yDomain[1] <= 0 ? margin.top : yScale(0);
+  const bottom = height - margin.bottom;
+  if (!Number.isFinite(zeroY) || zeroY >= bottom) return;
+
+  ctx.save();
+  const gradient = ctx.createLinearGradient(0, zeroY, 0, bottom);
+  gradient.addColorStop(0, "rgba(255, 110, 110, 0.04)");
+  gradient.addColorStop(1, "rgba(255, 110, 110, 0.18)");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(margin.left, zeroY, width - margin.left - margin.right, bottom - zeroY);
+
+  ctx.fillStyle = "rgba(255, 142, 142, 0.68)";
+  ctx.font = '10px "IBM Plex Sans", system-ui, sans-serif';
+  ctx.textAlign = "right";
+  ctx.textBaseline = "bottom";
+  ctx.fillText("negative", width - margin.right - 8, bottom - 8);
+  ctx.restore();
+}
+
 function drawPlotBorder(
   ctx: CanvasRenderingContext2D,
   width: number,
@@ -843,6 +893,8 @@ export function VarianceCanvasChart({
   hoverX,
   onHoverX,
   onActivate,
+  showZeroLine = false,
+  highlightNegative = false,
   xTickFormatter = (value: number) => value.toFixed(2),
   yTickFormatter = (value: number) => value.toFixed(3),
 }: {
@@ -857,6 +909,8 @@ export function VarianceCanvasChart({
   hoverX: number | null;
   onHoverX: (x: number | null) => void;
   onActivate?: () => void;
+  showZeroLine?: boolean;
+  highlightNegative?: boolean;
   xTickFormatter?: (value: number) => string;
   yTickFormatter?: (value: number) => string;
 }) {
@@ -886,6 +940,12 @@ export function VarianceCanvasChart({
     const yScale = makeYScale(yDomain, height, margin);
 
     drawGrid(ctx, width, height, margin, xTicks, yTicks, xScale, yScale);
+    if (highlightNegative) {
+      drawNegativeYRegion(ctx, width, height, margin, yDomain, yScale);
+    }
+    if (showZeroLine && yDomain[0] <= 0 && yDomain[1] >= 0) {
+      drawHorizontalReferenceLine(ctx, yScale(0), width, margin, "#ff9f2a", [6, 4], 0.82);
+    }
     withPlotClip(ctx, width, height, margin, () => {
       for (const item of series) {
         drawLineSeries(ctx, item.data, xScale, yScale, item.color, 2, 0.98, [], {
@@ -918,7 +978,7 @@ export function VarianceCanvasChart({
 
     drawPlotBorder(ctx, width, height, margin);
     recordCanvasFrame("variance", startedAt);
-  }, [height, hoverX, isVisible, margin, series, width, xDomain, xLabel, xTickFormatter, xTicks, yDomain, yLabel, yTickFormatter, yTicks]);
+  }, [height, highlightNegative, hoverX, isVisible, margin, series, showZeroLine, width, xDomain, xLabel, xTickFormatter, xTicks, yDomain, yLabel, yTickFormatter, yTicks]);
 
   const handleMove = useCallback(
     (event: MouseEvent<HTMLCanvasElement>) => {

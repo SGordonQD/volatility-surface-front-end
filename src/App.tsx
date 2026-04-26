@@ -1110,7 +1110,7 @@ function GTestPanel({
         <VarianceCanvasChart
           height={height}
           xLabel={snapshotKind === "x" ? "log-moneyness" : snapshotKind}
-          yLabel="g-test"
+          yLabel="g-test %"
           series={series}
           xDomain={xDomain}
           yDomain={yDomain}
@@ -1119,59 +1119,10 @@ function GTestPanel({
           hoverX={hoverX}
           onHoverX={onHoverX}
           onActivate={expanded ? undefined : onExpand}
-          yTickFormatter={(value) => value.toFixed(0)}
+          showZeroLine
+          highlightNegative
+          yTickFormatter={(value) => `${value.toFixed(0)}%`}
         />
-      </Card>
-    </div>
-  );
-}
-
-function GTestSurfacePanel({
-  grid,
-  height,
-  smileCount,
-  snapshotTs,
-  unit,
-  expanded = false,
-  onExpand,
-  onCollapse,
-}: {
-  grid: ReturnType<typeof buildSurfaceGrid>;
-  height: number;
-  smileCount: number;
-  snapshotTs: number | null | undefined;
-  unit: string | null | undefined;
-  expanded?: boolean;
-  onExpand?: () => void;
-  onCollapse?: () => void;
-}) {
-  const timestampText = formatSurfaceTimestamp(snapshotTs);
-  const handleToggle = expanded ? onCollapse : onExpand;
-  return (
-    <div className={`overview-panel ${expanded ? "overview-panel--expanded" : ""}`.trim()} style={{ minWidth: 0 }}>
-      <Card className={`overview-card surface-3d-card ${handleToggle ? "overview-card--expandable" : ""}`.trim()}>
-        <div className="surface-3d-panel-head">
-          <div className="surface-3d-panel-copy">
-            <h3 className="surface-3d-panel-title">G-Test Surface</h3>
-            <div className="surface-3d-panel-subtitle">
-              Timestamp: {timestampText} / Unit: {formatGTestUnit(unit)}
-            </div>
-          </div>
-          <div className="surface-3d-panel-controls">
-            <div className="surface-3d-panel-meta">{grid?.rows.length ?? 0} of {smileCount} smiles</div>
-            {handleToggle ? (
-              <button
-                type="button"
-                className={`panel-expand-button ${expanded ? "is-active" : ""}`.trim()}
-                onClick={handleToggle}
-              >
-                {expanded ? "Collapse" : "Expand"}
-              </button>
-            ) : null}
-          </div>
-        </div>
-
-        <Surface3DCanvas grid={grid} height={height} mode="g_test" onActivate={expanded ? undefined : onExpand} />
       </Card>
     </div>
   );
@@ -1195,8 +1146,7 @@ type RrDaysSeries = {
 type NodeXAxisMode = "node" | "strike" | "log_moneyness";
 type RiskRowMode = "expiry" | "tenor";
 type DashboardTabKey = "market" | "fit";
-type OverviewPanelKey = "variance" | "surface3d";
-type FitOverviewPanelKey = "g_test" | "g_test_surface";
+type FitOverviewPanelKey = "g_test" | "variance" | "surface3d";
 
 const RISK_FLASH_DURATION_MS = 760;
 const RISK_SERIES_COLORS = [
@@ -2973,7 +2923,6 @@ export default function App() {
   const [activeDashboardTab, setActiveDashboardTab] = useState<DashboardTabKey>("market");
   const [hoverX, setHoverX] = useState<number | null>(null);
   const [expandedExpiry, setExpandedExpiry] = useState<number | null>(null);
-  const [expandedOverviewPanel, setExpandedOverviewPanel] = useState<OverviewPanelKey | null>(null);
   const [expandedFitPanel, setExpandedFitPanel] = useState<FitOverviewPanelKey | null>(null);
   const [varianceScaleMode, setVarianceScaleMode] = useState<"auto" | "focus" | "tight">("focus");
   const [gTestScaleMode, setGTestScaleMode] = useState<"auto" | "focus" | "tight">("focus");
@@ -3144,14 +3093,6 @@ export default function App() {
   }, [expandedExpiry, smileDisplayRows]);
 
   useEffect(() => {
-    if (canSplitOverviewPanels || expandedOverviewPanel == null) return;
-    const frameId = window.requestAnimationFrame(() => {
-      setExpandedOverviewPanel(null);
-    });
-    return () => window.cancelAnimationFrame(frameId);
-  }, [canSplitOverviewPanels, expandedOverviewPanel]);
-
-  useEffect(() => {
     if (canSplitOverviewPanels || expandedFitPanel == null) return;
     const frameId = window.requestAnimationFrame(() => {
       setExpandedFitPanel(null);
@@ -3237,18 +3178,15 @@ export default function App() {
   const focusChartHeight = isPhoneLayout
     ? Math.max(280, viewportHeight - 260)
     : Math.max(420, viewportHeight - 340);
-  const varianceExpanded = expandedOverviewPanel === "variance";
-  const surface3DExpanded = expandedOverviewPanel === "surface3d";
-  const showVariancePanel = !surface3DExpanded;
-  const showSurface3DPanel = !varianceExpanded;
+  const varianceExpanded = expandedFitPanel === "variance";
+  const surface3DExpanded = expandedFitPanel === "surface3d";
+  const gTestExpanded = expandedFitPanel === "g_test";
+  const showVariancePanel = expandedFitPanel == null || varianceExpanded;
+  const showSurface3DPanel = expandedFitPanel == null || surface3DExpanded;
+  const showGTestPanel = expandedFitPanel == null || gTestExpanded;
   const varianceHeight = varianceExpanded ? overviewExpandedVarianceHeight : overviewCompactVarianceHeight;
   const surface3DHeight = surface3DExpanded ? overviewExpandedSurfaceHeight : overviewCompactSurfaceHeight;
-  const gTestExpanded = expandedFitPanel === "g_test";
-  const gTestSurfaceExpanded = expandedFitPanel === "g_test_surface";
-  const showGTestPanel = !gTestSurfaceExpanded;
-  const showGTestSurfacePanel = !gTestExpanded;
   const gTestHeight = gTestExpanded ? overviewExpandedVarianceHeight : overviewCompactVarianceHeight;
-  const gTestSurfaceHeight = gTestSurfaceExpanded ? overviewExpandedSurfaceHeight : overviewCompactSurfaceHeight;
 
   return (
     <div className="app-shell">
@@ -3292,45 +3230,6 @@ export default function App() {
 
           {activeDashboardTab === "market" ? (
             <>
-              <div
-                className={`overview-panels${canSplitOverviewPanels ? " overview-panels--split" : ""}${expandedOverviewPanel ? " overview-panels--spotlight" : ""}`.trim()}
-              >
-                {showVariancePanel ? (
-                  <VariancePanel
-                    hoverX={hoverX}
-                    onHoverX={setHoverX}
-                    scaleMode={varianceScaleMode}
-                    onScaleModeChange={setVarianceScaleMode}
-                    series={varianceSeries}
-                    snapshotKind={snapshot?.x_axis?.kind ?? "x"}
-                    snapshotCcy={snapshot?.ccy ?? "—"}
-                    smileCount={snapshot?.smiles.length ?? 0}
-                    varHeight={varianceHeight}
-                    xDomain={varianceXDomain}
-                    xTicks={varianceXTicks}
-                    yDomain={varianceYDomain}
-                    yTicks={varianceYTicks}
-                    expanded={varianceExpanded}
-                    onExpand={canSplitOverviewPanels ? () => setExpandedOverviewPanel("variance") : undefined}
-                    onCollapse={varianceExpanded ? () => setExpandedOverviewPanel(null) : undefined}
-                  />
-                ) : null}
-
-                {showSurface3DPanel ? (
-                  <Surface3DPanel
-                    grid={surfaceGrid}
-                    mode={surface3DMode}
-                    onModeChange={setSurface3DMode}
-                    height={surface3DHeight}
-                    smileCount={snapshot?.smiles.length ?? 0}
-                    snapshotTs={snapshot?.ts}
-                    expanded={surface3DExpanded}
-                    onExpand={canSplitOverviewPanels ? () => setExpandedOverviewPanel("surface3d") : undefined}
-                    onCollapse={surface3DExpanded ? () => setExpandedOverviewPanel(null) : undefined}
-                  />
-                ) : null}
-              </div>
-
               <RiskReversalNodesPanel
                 riskReversalByExpiry={riskReversalByExpiry}
                 tenorByKey={deferredTenorByKey}
@@ -3423,16 +3322,38 @@ export default function App() {
                 />
               ) : null}
 
-              {showGTestSurfacePanel ? (
-                <GTestSurfacePanel
+              {showVariancePanel ? (
+                <VariancePanel
+                  hoverX={hoverX}
+                  onHoverX={setHoverX}
+                  scaleMode={varianceScaleMode}
+                  onScaleModeChange={setVarianceScaleMode}
+                  series={varianceSeries}
+                  snapshotKind={snapshot?.x_axis?.kind ?? "x"}
+                  snapshotCcy={snapshot?.ccy ?? "—"}
+                  smileCount={snapshot?.smiles.length ?? 0}
+                  varHeight={varianceHeight}
+                  xDomain={varianceXDomain}
+                  xTicks={varianceXTicks}
+                  yDomain={varianceYDomain}
+                  yTicks={varianceYTicks}
+                  expanded={varianceExpanded}
+                  onExpand={canSplitOverviewPanels ? () => setExpandedFitPanel("variance") : undefined}
+                  onCollapse={varianceExpanded ? () => setExpandedFitPanel(null) : undefined}
+                />
+              ) : null}
+
+              {showSurface3DPanel ? (
+                <Surface3DPanel
                   grid={surfaceGrid}
-                  height={gTestSurfaceHeight}
+                  mode={surface3DMode}
+                  onModeChange={setSurface3DMode}
+                  height={surface3DHeight}
                   smileCount={snapshot?.smiles.length ?? 0}
                   snapshotTs={snapshot?.ts}
-                  unit={gTestUnit}
-                  expanded={gTestSurfaceExpanded}
-                  onExpand={canSplitOverviewPanels ? () => setExpandedFitPanel("g_test_surface") : undefined}
-                  onCollapse={gTestSurfaceExpanded ? () => setExpandedFitPanel(null) : undefined}
+                  expanded={surface3DExpanded}
+                  onExpand={canSplitOverviewPanels ? () => setExpandedFitPanel("surface3d") : undefined}
+                  onCollapse={surface3DExpanded ? () => setExpandedFitPanel(null) : undefined}
                 />
               ) : null}
             </div>

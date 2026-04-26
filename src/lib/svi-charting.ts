@@ -1563,7 +1563,16 @@ export function buildVarianceYDomain(series: VarianceSeries[]): [number, number]
 }
 
 export function buildGTestYDomain(series: VarianceSeries[]): [number, number] {
-  return buildCurveSeriesYDomain(series, [0, 100], 1, 1);
+  const ys = series.flatMap((item) =>
+    item.data.map((point) => point.y).filter((value): value is number => value != null)
+  );
+
+  if (ys.length === 0) return [-5, 100];
+
+  const minY = Math.min(0, ...ys);
+  const maxY = Math.max(0, ...ys);
+  const pad = Math.max((maxY - minY) * 0.12, 1);
+  return safeDomain(snapDown(minY - pad, 1), snapUp(maxY + pad, 1), [-5, 100]);
 }
 
 function buildSurfaceGridFallbackXValues() {
