@@ -7,6 +7,14 @@ export type SviSmile = {
   expiry: number;
   label: string;
   days?: number;
+  atm?: number | null;
+  atm_version?: number | null;
+  risk_reversal_nodes?: Record<string, RiskReversalNode>;
+  risk_reversals?: Record<string, number | null | undefined>;
+  flies?: Record<string, number | null | undefined>;
+  nodes?: Record<string, RiskReversalNode>;
+  risk_reversal_node_points?: RiskReversalNode[];
+  fly_node_points?: RiskReversalNode[];
   params?: {
     a: number;
     b: number;
@@ -16,19 +24,67 @@ export type SviSmile = {
   };
   var: number[];
   vol?: Array<number | null>;
+  g_test?: Array<number | null>;
+  g_test_unit?: string;
   x_axis?: SmileXAxis;
   x_values?: number[];
+};
+
+export type SviSurfaceGridRow = {
+  expiry: number;
+  label?: string;
+  days?: number | null;
+  atm?: number | null;
+  atm_version?: number | null;
+  var: Array<number | null>;
+  vol: Array<number | null>;
+  g_test?: Array<number | null>;
+  g_test_unit?: string;
+};
+
+export type SviSurfaceGrid = {
+  x_kind: string;
+  x_values: number[];
+  rows: SviSurfaceGridRow[];
+};
+
+export type RiskReversalNode = {
+  label: string;
+  option_type?: string;
+  target_delta?: number;
+  delta?: number;
+  delta_error?: number;
+  log_moneyness?: number;
+  strike?: number;
+  vol?: number;
 };
 
 export type SviSurfaceSnapshot = {
   type: "svi_surface_snapshot";
   ts: number;
   ccy: string;
+  surface_grid?: SviSurfaceGrid;
   x_axis?: {
     kind: string;
     values: number[];
   };
   smiles: SviSmile[];
+};
+
+export type SviSurfacePatchSmile = Partial<SviSmile> & Pick<SviSmile, "expiry">;
+
+export type SviSurfacePatch = {
+  type: "svi_surface_patch";
+  schemaVersion?: number;
+  ts?: number;
+  ccy?: string;
+  partial?: boolean;
+  surface_grid?: SviSurfaceGrid;
+  x_axis?: {
+    kind: string;
+    values: number[];
+  };
+  smiles?: SviSurfacePatchSmile[];
 };
 
 export type SurfaceFitStatusMessage = {
@@ -79,14 +135,26 @@ export type BookLevel = {
   side?: string;
   price?: number | null;
   iv: number;
-  size: number | null;
+  size?: number | null;
   strike?: number;
   expiry?: number;
+};
+
+export type SmilePointByExchange = {
+  best_bid_iv?: number | null;
+  best_ask_iv?: number | null;
+  bid_levels?: BookLevel[];
+  ask_levels?: BookLevel[];
+  last_trades?: BookLevel[];
+  last_trade_levels?: BookLevel[];
+  last_trade_iv?: number | null;
+  last_trade_price?: number | null;
 };
 
 export type SmilePoint = {
   strike: number;
   log_moneyness: number;
+  exchange?: string;
   best_bid_iv?: number | null;
   best_ask_iv?: number | null;
   last_trade_iv?: number | null;
@@ -97,6 +165,7 @@ export type SmilePoint = {
   last_trade_levels?: BookLevel[];
   bid_levels?: BookLevel[];
   ask_levels?: BookLevel[];
+  by_exchange?: Record<string, SmilePointByExchange | undefined>;
 };
 
 export type SmileUnderlying = {
@@ -169,6 +238,78 @@ export type SmileLevelsPatchMessage = {
   deletes?: SmileLevelDelete[];
 };
 
+export type SmileLevelsRemoveMessage = {
+  type: "smile_levels_remove";
+  ts: number;
+  ccy: string;
+  expiry: number;
+  label?: string;
+};
+
+export type SmileLevelsAddMessage = {
+  type: "smile_levels_add";
+  ts: number;
+  ccy: string;
+  expiry: number;
+  label?: string;
+  source_exchange?: string;
+};
+
+export type RiskReversalUpdateMessage = {
+  type?: string;
+  ts?: number;
+  ccy?: string;
+  expiry: number;
+  label?: string;
+  days?: number;
+  risk_reversal_nodes: Record<string, RiskReversalNode>;
+  risk_reversals?: Record<string, number | null | undefined>;
+};
+
+export type SviFlySmile = {
+  expiry: number;
+  label?: string;
+  days?: number;
+  atm?: number | null;
+  atm_version?: number | null;
+  flies?: Record<string, number | null | undefined>;
+  nodes?: Record<string, RiskReversalNode>;
+};
+
+export type SviFlyPatchMessage = {
+  type: "svi_fly_patch";
+  ts: number;
+  ccy?: string;
+  partial?: boolean;
+  smiles?: SviFlySmile[];
+};
+
+export type SviTenorRow = {
+  tenor?: string;
+  tenor_days?: number;
+  target_expiry?: number;
+  days?: number;
+  forward?: number;
+  vols?: Record<string, number | null | undefined>;
+  rr_fly?: Record<string, number | null | undefined>;
+  nodes?: Record<string, RiskReversalNode>;
+  is_extrapolated?: boolean;
+};
+
+export type SviTenorSnapshotMessage = {
+  type: "svi_tenor_snapshot";
+  ts: number;
+  ccy?: string;
+  rows?: SviTenorRow[];
+};
+
+export type SviTenorPatchMessage = {
+  type: "svi_tenor_patch";
+  ts: number;
+  ccy?: string;
+  rows?: SviTenorRow[];
+};
+
 export type SmilePointUpdateMessage = {
   type: "smile_point_update";
   ts: number;
@@ -186,6 +327,13 @@ export type SmilePointUpdateMessage = {
 
 export type IncomingMessage =
   | SviSurfaceSnapshot
+  | SviSurfacePatch
+  | SmileLevelsAddMessage
+  | SmileLevelsRemoveMessage
+  | RiskReversalUpdateMessage
+  | SviFlyPatchMessage
+  | SviTenorSnapshotMessage
+  | SviTenorPatchMessage
   | SmileLevelsSnapshotMessage
   | SmileLevelsPatchMessage
   | SmileSnapshotMessage
@@ -206,12 +354,52 @@ export type QuotesByExpiry = Record<
   }
 >;
 
+export type RiskReversalState = {
+  ts: number;
+  expiry: number;
+  label?: string;
+  days?: number;
+  risk_reversal_nodes: Record<string, RiskReversalNode>;
+  risk_reversals?: Record<string, number | null | undefined>;
+};
+
+export type RiskReversalByExpiry = Record<string, RiskReversalState>;
+
+export type FlyState = {
+  ts: number;
+  expiry: number;
+  label?: string;
+  days?: number;
+  atm?: number | null;
+  atmVersion?: number | null;
+  flies?: Record<string, number | null | undefined>;
+  nodes?: Record<string, RiskReversalNode>;
+};
+
+export type FlyByExpiry = Record<string, FlyState>;
+
+export type TenorState = {
+  ts: number;
+  tenor: string;
+  tenorDays?: number;
+  targetExpiry?: number | null;
+  days?: number;
+  forward?: number | null;
+  vols?: Record<string, number | null | undefined>;
+  rrFly?: Record<string, number | null | undefined>;
+  nodes?: Record<string, RiskReversalNode>;
+  isExtrapolated?: boolean;
+};
+
+export type TenorByKey = Record<string, TenorState>;
+
 export type ScatterRow = {
   x: number;
   y: number;
   strike: number;
   level: number;
   side: "bid" | "ask" | "trade";
+  exchange?: string;
   size: number | null;
   tradeUpdateTs?: number | null;
   flashUntilTs?: number | null;
@@ -228,9 +416,12 @@ export type SmileChartRow = {
   readableExpiry: string;
   atm?: number | null;
   lastTradePrice?: number | null;
+  hasDeribit: boolean;
+  hasOkx: boolean;
   curveData: CurveRow[];
   bidScatter: ScatterRow[];
   askScatter: ScatterRow[];
+  okxScatter: ScatterRow[];
   bestBidScatter: ScatterRow[];
   bestAskScatter: ScatterRow[];
   lastTradeScatter: ScatterRow[];
