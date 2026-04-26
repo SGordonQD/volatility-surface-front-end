@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type MouseEvent, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type RefObject } from "react";
 
 import {
   getOpacityFromSizeRelative,
@@ -60,7 +60,116 @@ function easeOutCubic(t: number) {
 
 const TRADE_FLASH_DURATION_MS = 10_000;
 const TRADE_FADE_OUT_DURATION_MS = 120_000;
+const TRADE_MOTION_TICK_MS = 1_000;
+const MAX_ANIMATED_SCATTER_POINTS = 900;
 const STRIKE_TICK_FORMATTER = new Intl.NumberFormat("en-GB", { maximumFractionDigits: 0 });
+
+const tradeMotionSubscribers = new Set<() => void>();
+let tradeMotionTimerId: number | null = null;
+
+function ensureTradeMotionTimer() {
+  if (tradeMotionTimerId != null || typeof window === "undefined") return;
+  tradeMotionTimerId = window.setInterval(() => {
+    for (const notify of tradeMotionSubscribers) {
+      notify();
+    }
+  }, TRADE_MOTION_TICK_MS);
+}
+
+function cleanupTradeMotionTimer() {
+  if (tradeMotionSubscribers.size > 0) return;
+  if (tradeMotionTimerId == null || typeof window === "undefined") return;
+  window.clearInterval(tradeMotionTimerId);
+  tradeMotionTimerId = null;
+}
+
+function useElementVisible(ref: RefObject<HTMLElement | null>) {
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    const element = ref.current;
+    if (!element || typeof IntersectionObserver === "undefined") return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setVisible(entry.isIntersecting);
+      },
+      { rootMargin: "180px" }
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [ref]);
+
+  return visible;
+}
+
+function resolveTradeMotionEndMs(data: ScatterRow[]) {
+  let endMs = 0;
+  for (const point of data) {
+    if (point.flashUntilTs != null && Number.isFinite(point.flashUntilTs)) {
+      endMs = Math.max(endMs, point.flashUntilTs);
+    }
+    if (point.tradeUpdateTs != null && Number.isFinite(point.tradeUpdateTs)) {
+      endMs = Math.max(endMs, point.tradeUpdateTs + TRADE_FADE_OUT_DURATION_MS);
+    }
+  }
+  return endMs;
+}
+
+function useTradeMotionNow(data: ScatterRow[], visible: boolean) {
+  const [nowMs, setNowMs] = useState(0);
+  const motionEndMs = useMemo(() => resolveTradeMotionEndMs(data), [data]);
+  const enabled = visible && motionEndMs > nowMs;
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    const notify = () => {
+      setNowMs(Date.now());
+    };
+    notify();
+    tradeMotionSubscribers.add(notify);
+    ensureTradeMotionTimer();
+
+    return () => {
+      tradeMotionSubscribers.delete(notify);
+      cleanupTradeMotionTimer();
+    };
+  }, [enabled]);
+
+  return nowMs;
+}
+
+function recordCanvasFrame(kind: string, startedAt: number) {
+  if (typeof window === "undefined") return;
+  const elapsedMs = performance.now() - startedAt;
+  const target = window as Window & {
+    __SVI_RENDER_DEBUG__?: {
+      frames: number;
+      lastKind: string;
+      lastFrameMs: number;
+      maxFrameMs: number;
+      byKind: Record<string, { frames: number; lastFrameMs: number; maxFrameMs: number }>;
+    };
+  };
+  const debug = target.__SVI_RENDER_DEBUG__ ?? {
+    frames: 0,
+    lastKind: kind,
+    lastFrameMs: 0,
+    maxFrameMs: 0,
+    byKind: {},
+  };
+  const bucket = debug.byKind[kind] ?? { frames: 0, lastFrameMs: 0, maxFrameMs: 0 };
+  bucket.frames += 1;
+  bucket.lastFrameMs = Number(elapsedMs.toFixed(2));
+  bucket.maxFrameMs = Math.max(bucket.maxFrameMs * 0.995, elapsedMs);
+  debug.frames += 1;
+  debug.lastKind = kind;
+  debug.lastFrameMs = bucket.lastFrameMs;
+  debug.maxFrameMs = Math.max(debug.maxFrameMs * 0.995, elapsedMs);
+  debug.byKind[kind] = bucket;
+  target.__SVI_RENDER_DEBUG__ = debug;
+}
 
 function interpolateCurveData(previous: CurveRow[], next: CurveRow[], t: number): CurveRow[] {
   if (next.length === 0) return [];
@@ -110,7 +219,7 @@ function interpolateCurveData(previous: CurveRow[], next: CurveRow[], t: number)
 }
 
 function scatterMotionKey(point: ScatterRow): string {
-  return `${point.side}:${point.strike}:${point.level}`;
+  return `${point.exchange ?? "na"}:${point.side}:${point.strike}:${point.level}`;
 }
 
 function interpolateScatterData(previous: ScatterRow[], next: ScatterRow[], t: number): ScatterRow[] {
@@ -394,6 +503,7 @@ function drawVarianceExpiryLabels(
   xScale: (x: number) => number,
   yScale: (y: number) => number
 ) {
+  const targetAnchorX = xDomain[0] + (xDomain[1] - xDomain[0]) * 0.82;
   const rawLabels = series
     .map((item) => {
       const visiblePoints = item.data.filter(
@@ -404,7 +514,12 @@ function drawVarianceExpiryLabels(
           point.x <= xDomain[1]
       );
       if (visiblePoints.length === 0) return null;
-      const endpoint = visiblePoints[visiblePoints.length - 1];
+      const endpoint = visiblePoints.reduce((best, candidate) => {
+        if (!best) return candidate;
+        return Math.abs(candidate.x - targetAnchorX) < Math.abs(best.x - targetAnchorX)
+          ? candidate
+          : best;
+      }, visiblePoints[0]);
       return {
         label: item.label,
         color: item.color,
@@ -425,7 +540,9 @@ function drawVarianceExpiryLabels(
 
   const minY = margin.top + 8;
   const maxY = height - margin.bottom - 8;
-  const minGap = 12;
+  const availableHeight = Math.max(1, maxY - minY);
+  const dynamicGap = availableHeight / Math.max(2, rawLabels.length + 1);
+  const minGap = Math.min(14, Math.max(9, dynamicGap * 0.78));
   const labels = [...rawLabels].sort((a, b) => a.y - b.y);
 
   for (let idx = 0; idx < labels.length; idx += 1) {
@@ -441,7 +558,7 @@ function drawVarianceExpiryLabels(
     }
   }
 
-  const labelX = width - margin.right + 10;
+  const labelX = width - margin.right + 12;
   ctx.save();
   ctx.font = '10px "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace';
   ctx.textAlign = "left";
@@ -475,23 +592,45 @@ function drawScatterSeries(
   data: ScatterRow[],
   xScale: (x: number) => number,
   yScale: (y: number) => number,
-  color: string,
-  maxSize: number
+  maxSize: number,
+  options?: {
+    exchangeStroke?: string;
+    shape?: "circle" | "diamond" | "triangle" | "square";
+  }
 ) {
   ctx.save();
+  const exchangeStroke = options?.exchangeStroke;
+  const shape = options?.shape ?? "circle";
 
   for (const point of data) {
     const px = xScale(point.x);
     const py = yScale(point.y);
     const opacity = getOpacityFromSizeRelative(point.size, maxSize, 0.18, 0.4);
     const radius = getRadiusFromSizeRelative(point.size, maxSize, 1.4, 2.5);
+    const sideFill = point.side === "bid" ? "#66b389" : "#d26f74";
 
     ctx.beginPath();
-    ctx.fillStyle = hexToRgba(color, opacity);
-    ctx.strokeStyle = hexToRgba(color, 0.78);
+    ctx.fillStyle = hexToRgba(sideFill, opacity);
+    const strokeBase = exchangeStroke ?? sideFill;
+    ctx.strokeStyle = hexToRgba(strokeBase, 0.78);
     ctx.lineWidth = 1;
     ctx.shadowBlur = 0;
-    ctx.arc(px, py, radius, 0, Math.PI * 2);
+    if (shape === "triangle") {
+      ctx.moveTo(px, py - radius);
+      ctx.lineTo(px + radius * 0.88, py + radius * 0.72);
+      ctx.lineTo(px - radius * 0.88, py + radius * 0.72);
+      ctx.closePath();
+    } else if (shape === "square") {
+      ctx.rect(px - radius, py - radius, radius * 2, radius * 2);
+    } else if (shape === "diamond") {
+      ctx.moveTo(px, py - radius);
+      ctx.lineTo(px + radius, py);
+      ctx.lineTo(px, py + radius);
+      ctx.lineTo(px - radius, py);
+      ctx.closePath();
+    } else {
+      ctx.arc(px, py, radius, 0, Math.PI * 2);
+    }
     ctx.fill();
     ctx.stroke();
   }
@@ -645,6 +784,10 @@ function renderSmileChartFrame({
 
   const askScatter = scatterMode === "best" ? row.bestAskScatter : row.askScatter;
   const bidScatter = scatterMode === "best" ? row.bestBidScatter : row.bidScatter;
+  const rowOkxScatter = row.okxScatter ?? [];
+  const okxScatter = scatterMode === "best"
+    ? rowOkxScatter.filter((point) => point.level === 0)
+    : rowOkxScatter;
   const tradeScatter = row.lastTradeScatter;
 
   if (previousCurveData && previousCurveData.length > 0) {
@@ -653,8 +796,15 @@ function renderSmileChartFrame({
 
   drawLineSeries(ctx, row.curveData, xScale, yScale, lineColor, 2.4, 0.26);
   drawLineSeries(ctx, row.curveData, xScale, yScale, lineColor, 1.6, 0.98);
-  drawScatterSeries(ctx, askScatter, xScale, yScale, "#d26f74", row.maxVisibleSize);
-  drawScatterSeries(ctx, bidScatter, xScale, yScale, "#66b389", row.maxVisibleSize);
+  drawScatterSeries(ctx, askScatter, xScale, yScale, row.maxVisibleSize, {
+    shape: "circle",
+  });
+  drawScatterSeries(ctx, bidScatter, xScale, yScale, row.maxVisibleSize, {
+    shape: "circle",
+  });
+  drawScatterSeries(ctx, okxScatter, xScale, yScale, row.maxVisibleSize, {
+    shape: "square",
+  });
   drawTradeScatterSeries(ctx, tradeScatter, xScale, yScale, "#ff9f2a", nowMs ?? Date.now());
 
   if (showReferenceLines && hoverX != null) {
@@ -691,6 +841,7 @@ export function VarianceCanvasChart({
   yTicks,
   hoverX,
   onHoverX,
+  onActivate,
 }: {
   height: number;
   xLabel: string;
@@ -701,15 +852,24 @@ export function VarianceCanvasChart({
   yTicks: number[];
   hoverX: number | null;
   onHoverX: (x: number | null) => void;
+  onActivate?: () => void;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const width = useContainerWidth(wrapRef);
-  const margin = { top: 12, right: 92, bottom: 42, left: 52 };
+  const isVisible = useElementVisible(wrapRef);
+  const margin = useMemo(
+    () =>
+      width <= 640
+        ? { top: 10, right: 72, bottom: 34, left: 42 }
+        : { top: 12, right: 118, bottom: 42, left: 52 },
+    [width]
+  );
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || width <= 0) return;
+    if (!canvas || width <= 0 || !isVisible) return;
+    const startedAt = performance.now();
 
     const ctx = dprSize(canvas, width, height);
     if (!ctx) return;
@@ -751,7 +911,8 @@ export function VarianceCanvasChart({
     );
 
     drawPlotBorder(ctx, width, height, margin);
-  }, [height, hoverX, series, width, xDomain, xLabel, xTicks, yDomain, yTicks]);
+    recordCanvasFrame("variance", startedAt);
+  }, [height, hoverX, isVisible, margin, series, width, xDomain, xLabel, xTicks, yDomain, yTicks]);
 
   const handleMove = useCallback(
     (event: MouseEvent<HTMLCanvasElement>) => {
@@ -759,7 +920,7 @@ export function VarianceCanvasChart({
       const rect = wrapRef.current.getBoundingClientRect();
       onHoverX(invertX(event.clientX - rect.left, xDomain, width, margin));
     },
-    [onHoverX, width, xDomain]
+    [margin, onHoverX, width, xDomain]
   );
 
   return (
@@ -768,6 +929,7 @@ export function VarianceCanvasChart({
         ref={canvasRef}
         onMouseMove={handleMove}
         onMouseLeave={() => onHoverX(null)}
+        onClick={onActivate}
         style={{ width: "100%", height: "100%", display: "block", cursor: "crosshair" }}
       />
     </div>
@@ -799,46 +961,54 @@ export function SmileCanvasChart({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const previousRowRef = useRef<SmileChartRow | null>(null);
   const previousCurveGhostRef = useRef<CurveRow[] | null>(null);
+  const previousXAxisLabelRef = useRef<string | null>(null);
   const lastAnimationStartRef = useRef(0);
-  const [tradeFlashTick, setTradeFlashTick] = useState(0);
   const width = useContainerWidth(wrapRef);
-  const margin = { top: 12, right: 12, bottom: 42, left: 48 };
-
-  useEffect(() => {
-    const nowMs = Date.now();
-    const hasActiveTradeMotion = row.lastTradeScatter.some(
-      (point) =>
-        (point.flashUntilTs != null && point.flashUntilTs > nowMs) ||
-        (point.tradeUpdateTs != null && nowMs - point.tradeUpdateTs < TRADE_FADE_OUT_DURATION_MS)
-    );
-    if (!hasActiveTradeMotion) return;
-
-    const intervalId = window.setInterval(() => {
-      setTradeFlashTick((previous) => previous + 1);
-    }, 120);
-
-    return () => window.clearInterval(intervalId);
-  }, [row.lastTradeScatter]);
+  const isVisible = useElementVisible(wrapRef);
+  const margin = useMemo(
+    () =>
+      width <= 640
+        ? { top: 10, right: 8, bottom: 34, left: 40 }
+        : { top: 12, right: 12, bottom: 42, left: 48 },
+    [width]
+  );
+  const tradeMotionNowMs = useTradeMotionNow(row.lastTradeScatter, isVisible);
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || width <= 0) return;
+    if (!canvas || width <= 0 || !isVisible) return;
 
     const ctx = dprSize(canvas, width, height);
     if (!ctx) return;
 
+    const previousXAxisLabel = previousXAxisLabelRef.current;
+    const axisModeChanged = previousXAxisLabel != null && previousXAxisLabel !== xLabel;
+    if (axisModeChanged) {
+      previousRowRef.current = null;
+      previousCurveGhostRef.current = null;
+    }
+    previousXAxisLabelRef.current = xLabel;
+
     const previousRow = previousRowRef.current;
     const nowPerf = performance.now();
     const isBurstUpdate = nowPerf - lastAnimationStartRef.current < 120;
+    const animatedScatterCount =
+      row.bidScatter.length +
+      row.askScatter.length +
+      (row.okxScatter?.length ?? 0) +
+      row.lastTradeScatter.length;
     const shouldAnimate =
       previousRow != null &&
       previousRow.expiry === row.expiry &&
+      width > 640 &&
       showAxes &&
       scatterMode === "all" &&
       !isBurstUpdate &&
+      animatedScatterCount <= MAX_ANIMATED_SCATTER_POINTS &&
       canAnimateCurveTransition(previousRow.curveData, row.curveData);
 
     if (!shouldAnimate) {
+      const startedAt = performance.now();
       if (
         previousRow &&
         previousRow.expiry === row.expiry &&
@@ -862,9 +1032,10 @@ export function SmileCanvasChart({
         showAxes,
         showReferenceLines,
         previousCurveData: previousCurveGhostRef.current,
-        nowMs: Date.now(),
+        nowMs: tradeMotionNowMs,
       });
       previousRowRef.current = row;
+      recordCanvasFrame("smile", startedAt);
       return;
     }
 
@@ -883,10 +1054,13 @@ export function SmileCanvasChart({
         curveData: interpolateCurveData(fromRow.curveData, row.curveData, eased),
         bidScatter: interpolateScatterData(fromRow.bidScatter, row.bidScatter, eased),
         askScatter: interpolateScatterData(fromRow.askScatter, row.askScatter, eased),
+        okxScatter: interpolateScatterData(fromRow.okxScatter ?? [], row.okxScatter ?? [], eased),
         bestBidScatter: interpolateScatterData(fromRow.bestBidScatter, row.bestBidScatter, eased),
         bestAskScatter: interpolateScatterData(fromRow.bestAskScatter, row.bestAskScatter, eased),
+        lastTradeScatter: interpolateScatterData(fromRow.lastTradeScatter, row.lastTradeScatter, eased),
       };
 
+      const frameStartedAt = performance.now();
       renderSmileChartFrame({
         ctx,
         width,
@@ -904,8 +1078,9 @@ export function SmileCanvasChart({
         yDomainOverride: row.yDomain,
         xTicksOverride: row.xTicks,
         yTicksOverride: row.yTicks,
-        nowMs: Date.now(),
+        nowMs: tradeMotionNowMs || Date.now(),
       });
+      recordCanvasFrame("smile-animation", frameStartedAt);
 
       if (progress < 1) {
         frameId = requestAnimationFrame(renderAnimatedFrame);
@@ -919,12 +1094,14 @@ export function SmileCanvasChart({
   }, [
     height,
     hoverX,
+    isVisible,
     lineColor,
+    margin,
     row,
     scatterMode,
     showAxes,
     showReferenceLines,
-    tradeFlashTick,
+    tradeMotionNowMs,
     width,
     xLabel,
   ]);
@@ -935,7 +1112,7 @@ export function SmileCanvasChart({
       const rect = wrapRef.current.getBoundingClientRect();
       onHoverX(invertX(event.clientX - rect.left, row.xDomain, width, margin));
     },
-    [onHoverX, row.xDomain, width]
+    [margin, onHoverX, row.xDomain, width]
   );
 
   return (
@@ -959,30 +1136,16 @@ export function MiniSmileCanvasChart({
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [tradeFlashTick, setTradeFlashTick] = useState(0);
   const width = useContainerWidth(wrapRef);
   const height = 72;
-  const margin = { top: 8, right: 8, bottom: 8, left: 8 };
-
-  useEffect(() => {
-    const nowMs = Date.now();
-    const hasActiveTradeMotion = row.lastTradeScatter.some(
-      (point) =>
-        (point.flashUntilTs != null && point.flashUntilTs > nowMs) ||
-        (point.tradeUpdateTs != null && nowMs - point.tradeUpdateTs < TRADE_FADE_OUT_DURATION_MS)
-    );
-    if (!hasActiveTradeMotion) return;
-
-    const intervalId = window.setInterval(() => {
-      setTradeFlashTick((previous) => previous + 1);
-    }, 160);
-
-    return () => window.clearInterval(intervalId);
-  }, [row.lastTradeScatter]);
+  const margin = useMemo(() => ({ top: 8, right: 8, bottom: 8, left: 8 }), []);
+  const isVisible = useElementVisible(wrapRef);
+  const tradeMotionNowMs = useTradeMotionNow(row.lastTradeScatter, isVisible);
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || width <= 0) return;
+    if (!canvas || width <= 0 || !isVisible) return;
+    const startedAt = performance.now();
 
     const ctx = dprSize(canvas, width, height);
     if (!ctx) return;
@@ -1004,9 +1167,10 @@ export function MiniSmileCanvasChart({
       scatterMode: "best",
       showAxes: false,
       showReferenceLines: false,
-      nowMs: Date.now(),
+      nowMs: tradeMotionNowMs,
     });
-  }, [height, lineColor, row, tradeFlashTick, width]);
+    recordCanvasFrame("mini-smile", startedAt);
+  }, [height, isVisible, lineColor, margin, row, tradeMotionNowMs, width]);
 
   return (
     <div ref={wrapRef} className="mini-chart-frame">

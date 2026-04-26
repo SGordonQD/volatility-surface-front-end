@@ -1,0 +1,21 @@
+services:
+  api:
+    image: ${SVI_API_IMAGE:-svi-api:latest}
+    container_name: svi-api
+    restart: unless-stopped
+    expose:
+      - "8765"
+    ports:
+      - "8765:8765"
+
+  frontend:
+    build:
+      context: .
+      args:
+        VITE_SVI_WS_URL: ${VITE_SVI_WS_URL:-/ws}
+    container_name: svi-frontend
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "8080:80"
