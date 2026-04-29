@@ -298,7 +298,7 @@ function DashboardHeader({
   return (
     <header className="app-toolbar">
       <div className="app-toolbar__inner">
-        <div className="app-toolbar__identity">
+        <div className="app-toolbar__topline">
           <div className="brand-lockup">
             <svg
               className="brand-lockup__mark"
@@ -322,58 +322,73 @@ function DashboardHeader({
             <div className="brand-lockup__text">
               <div className="brand-lockup__eyebrow">Surface Monitor</div>
               <h1 className="app-toolbar__title">Derivasys</h1>
-              <p className="app-toolbar__subtitle">
-                Dense live view of fitted variance and quoted smile structure.
-              </p>
             </div>
           </div>
 
-          <div className="app-toolbar__meta">
-            <span className={`terminal-pill ${connected ? "terminal-pill--ok" : "terminal-pill--warn"}`}>
-              <span className="terminal-pill__dot" />
-              {connected ? "Feed Online" : "Feed Offline"}
-            </span>
-            <span className="terminal-pill terminal-pill--dim">{snapshotCcy}</span>
-            <span className="terminal-pill terminal-pill--dim">{snapshotKind}</span>
-            <span className="terminal-pill terminal-pill--dim">{smileCount} smiles</span>
-            {!connected && reconnectAttempt > 0 ? (
-              <span className="terminal-pill terminal-pill--warn">retry #{reconnectAttempt}</span>
-            ) : null}
+          <div className="app-toolbar__stats">
+            <div className="metric-card">
+              <span className="metric-card__label">SVI Push</span>
+              <span className="metric-card__value">{formatTs(lastSnapshotUpdated)}</span>
+            </div>
+            <div className="metric-card">
+              <span className="metric-card__label">Last Fit</span>
+              <span className="metric-card__value metric-card__value--accent">
+                {lastFitError != null ? lastFitError.toFixed(4) : "—"}
+              </span>
+            </div>
+            <div className="metric-card">
+              <span className="metric-card__label">Current Fit</span>
+              <span className={currentFitClass}>
+                {currentFitError != null ? currentFitError.toFixed(4) : "—"}
+              </span>
+            </div>
+            <div className="metric-card">
+              <span className="metric-card__label">Fit Time</span>
+              <span className="metric-card__value">
+                {lastFitElapsedSeconds != null ? `${lastFitElapsedSeconds.toFixed(2)}s` : "—"}
+              </span>
+            </div>
+            <div className="metric-card">
+              <span className="metric-card__label">Feed State</span>
+              <span
+                className={`metric-card__value ${
+                  connected ? "metric-card__value--down" : "metric-card__value--up"
+                }`}
+              >
+                {connected ? "steady" : "waiting"}
+              </span>
+            </div>
           </div>
         </div>
 
-        <div className="app-toolbar__stats">
-          <div className="metric-card">
-            <span className="metric-card__label">SVI Push</span>
-            <span className="metric-card__value">{formatTs(lastSnapshotUpdated)}</span>
-          </div>
-          <div className="metric-card">
-            <span className="metric-card__label">Last Fit</span>
-            <span className="metric-card__value metric-card__value--accent">
-              {lastFitError != null ? lastFitError.toFixed(4) : "—"}
-            </span>
-          </div>
-          <div className="metric-card">
-            <span className="metric-card__label">Current Fit</span>
-            <span className={currentFitClass}>
-              {currentFitError != null ? currentFitError.toFixed(4) : "—"}
-            </span>
-          </div>
-          <div className="metric-card">
-            <span className="metric-card__label">Fit Time</span>
-            <span className="metric-card__value">
-              {lastFitElapsedSeconds != null ? `${lastFitElapsedSeconds.toFixed(2)}s` : "—"}
-            </span>
-          </div>
-          <div className="metric-card">
-            <span className="metric-card__label">Feed State</span>
-            <span
-              className={`metric-card__value ${
-                connected ? "metric-card__value--down" : "metric-card__value--up"
-              }`}
+        <div className="app-toolbar__summary">
+          <p className="app-toolbar__subtitle">
+            Real-time arbitrage-free implied volatility surface calibrated to live order book data. Displays
+            model-implied vols, risk reversals, and butterfly spreads across maturities.
+          </p>
+          <div className="app-toolbar__summary-controls">
+            <div className="app-toolbar__meta">
+              <span className={`terminal-pill ${connected ? "terminal-pill--ok" : "terminal-pill--warn"}`}>
+                <span className="terminal-pill__dot" />
+                {connected ? "Feed Online" : "Feed Offline"}
+              </span>
+              <span className="terminal-pill terminal-pill--dim">{snapshotCcy}</span>
+              <span className="terminal-pill terminal-pill--dim">{snapshotKind}</span>
+              <span className="terminal-pill terminal-pill--dim">{smileCount} smiles</span>
+              {!connected && reconnectAttempt > 0 ? (
+                <span className="terminal-pill terminal-pill--warn">retry #{reconnectAttempt}</span>
+              ) : null}
+            </div>
+            <div className="model-strip" aria-label="Pricing engine summary">
+              <span>Model: SVI</span>
+              <span>Calibration: constrained no-arb</span>
+            </div>
+            <a
+              className="source-contact-link"
+              href="mailto:gdnaes@gmail.com?subject=Vol%20Surface%20source%20code%20review"
             >
-              {connected ? "steady" : "waiting"}
-            </span>
+              Request source review
+            </a>
           </div>
         </div>
       </div>
@@ -411,6 +426,58 @@ function FirstVisitDisclaimer({ onAcknowledge }: { onAcknowledge: () => void }) 
         <div className="disclaimer-modal__actions">
           <button type="button" className="disclaimer-modal__button" onClick={onAcknowledge}>
             I Understand
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FirstVisitIntro({ onContinue }: { onContinue: () => void }) {
+  return (
+    <div className="disclaimer-overlay" role="presentation">
+      <div className="disclaimer-modal" role="dialog" aria-modal="true" aria-labelledby="intro-title">
+        <div className="disclaimer-modal__eyebrow">Vol Surface</div>
+        <h2 id="intro-title" className="disclaimer-modal__title">
+          Realtime pricing-engine monitor
+        </h2>
+        <p className="disclaimer-modal__copy">
+          This page shows the live state of the options pricing engine: fitted SVI variance and volatility surfaces,
+          quoted smiles, exchange bid/ask levels, last-trade IVs, and fit health.
+        </p>
+        <div className="intro-feature-list" aria-label="Dashboard capabilities">
+          <div className="intro-feature-list__item">
+            <span className="intro-feature-list__label">Surface</span>
+            <span>Track VAR/VOL fits by expiry and tenor.</span>
+          </div>
+          <div className="intro-feature-list__item">
+            <span className="intro-feature-list__label">Market</span>
+            <span>Compare Deribit/OKX quotes and trades against the fitted curve.</span>
+          </div>
+          <div className="intro-feature-list__item">
+            <span className="intro-feature-list__label">Risk</span>
+            <span>Monitor RR/fly nodes, through-mid levels, and fit diagnostics.</span>
+          </div>
+        </div>
+        <p className="disclaimer-modal__copy">
+          It is intended as an operational dashboard, not a trading ticket or source of record.
+        </p>
+        <p className="disclaimer-modal__copy">
+          Although demonstrated on crypto options, the framework is designed around general pricing-system problems:
+          constrained calibration, market data normalisation, curve/surface construction, risk generation, and
+          trader-facing visualisation. These concepts transfer directly to rates curves, swaption surfaces, credit
+          curves, and fixed income analytics.
+        </p>
+        <p className="disclaimer-modal__copy">
+          Please contact Sean Gordon (
+          <a className="disclaimer-modal__link" href="mailto:gdnaes@gmail.com">
+            gdnaes@gmail.com
+          </a>
+          ) if you would like to review the source code.
+        </p>
+        <div className="disclaimer-modal__actions">
+          <button type="button" className="disclaimer-modal__button" onClick={onContinue}>
+            Continue
           </button>
         </div>
       </div>
@@ -2376,7 +2443,12 @@ const FlyMetricsPanel = memo(function FlyMetricsPanel({
     <div style={{ gridColumn: "1 / -1", minWidth: 0 }}>
       <Card className="risk-grid-card">
         <div className="risk-grid__header">
-          <h3 className="risk-grid__title">SVI Fly Grid</h3>
+          <div className="risk-grid__heading">
+            <h3 className="risk-grid__title">SVI Fly Grid</h3>
+            <p className="risk-grid__subtitle">
+              Fly dislocations highlight smile curvature and convexity opportunities across maturities.
+            </p>
+          </div>
           <div className="risk-grid__header-controls">
             <div className="scale-toggle" role="group" aria-label="Fly row mode">
               <button
@@ -2667,7 +2739,12 @@ const RiskReversalNodesPanel = memo(function RiskReversalNodesPanel({
     <div style={{ gridColumn: "1 / -1", minWidth: 0 }}>
       <Card className="risk-grid-card">
         <div className="risk-grid__header">
-          <h3 className="risk-grid__title">Risk Reversal Nodes</h3>
+          <div className="risk-grid__heading">
+            <h3 className="risk-grid__title">Risk Reversal Nodes</h3>
+            <p className="risk-grid__subtitle">
+              RR dislocations show skew pressure, while surface smoothness supports stable pricing for execution.
+            </p>
+          </div>
           <div className="risk-grid__header-controls">
             <div className="scale-toggle" role="group" aria-label="Risk row mode">
               <button
@@ -2943,7 +3020,11 @@ export default function App() {
       return true;
     }
   });
+  const [showIntro, setShowIntro] = useState(showDisclaimer);
   const lastTradeAlertKeyRef = useRef<string>("");
+  const continueFromIntro = useCallback(() => {
+    setShowIntro(false);
+  }, []);
   const acknowledgeDisclaimer = useCallback(() => {
     setShowDisclaimer(false);
     try {
@@ -3190,7 +3271,8 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      {showDisclaimer ? <FirstVisitDisclaimer onAcknowledge={acknowledgeDisclaimer} /> : null}
+      {showIntro ? <FirstVisitIntro onContinue={continueFromIntro} /> : null}
+      {showDisclaimer && !showIntro ? <FirstVisitDisclaimer onAcknowledge={acknowledgeDisclaimer} /> : null}
       <DashboardHeader
         connected={connected}
         currentFitError={currentFitError}

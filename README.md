@@ -1,8 +1,20 @@
 # Vol Surface
 
-Vol Surface is the browser UI for a realtime options pricing engine. It visualises fitted SVI variance/volatility surfaces, quoted option smiles, risk-reversal and fly nodes, tenor slices, quote-vs-fit dislocations, and fit diagnostics streamed from the backend over websocket.
+Vol Surface is the realtime browser UI for a broader options pricing and calibration system. It consumes websocket snapshots and patches from a pricing-engine API, then visualises fitted SVI variance/volatility surfaces, quoted option smiles, risk-reversal and fly nodes, tenor slices, quote-vs-fit dislocations, and fit diagnostics.
 
-This repository contains the `ui` layer only. The pricing engine, calibration jobs, market-data connectors, and API process are expected to live in the wider engine stack.
+This repository contains the `ui` layer only. Backend pricing, calibration, market-data normalisation, and websocket broadcasting services are expected to live in the wider engine stack.
+
+Although demonstrated on crypto options, the framework is designed around general pricing-system problems: constrained calibration, market data normalisation, curve/surface construction, risk generation, and trader-facing visualisation. These concepts transfer directly to rates curves, swaption surfaces, credit curves, and fixed income analytics.
+
+## Demo Scope
+
+The dashboard is designed to run against a live websocket API. Without that API it can still be built, linted, and previewed, but the market-data panels will not populate.
+
+Recommended screenshots before sharing publicly:
+
+- Surface monitor: variance/volatility term structure and fit diagnostics.
+- Smile matrix: per-expiry bid/ask/trade IV with Deribit/OKX overlays.
+- Risk grids: RR/fly nodes, tenor mode, and quote-through-fit heatmap.
 
 ## What It Does
 
@@ -12,6 +24,8 @@ This repository contains the `ui` layer only. The pricing engine, calibration jo
 - Highlights quotes through the fitted SVI mid in the SVI-through matrix.
 - Shows fit metrics such as current fit, last fit, elapsed fit time, feed state, and SVI push time.
 - Provides runtime diagnostics for websocket queue depth, dropped messages, render timing, and crash logs.
+- Supports first-visit data-quality/GDPR disclosure for externally shared deployments.
+- Deploys as a static Vite build, suitable for S3/CloudFront or another HTTPS-capable static host.
 
 ## Architecture
 
@@ -21,7 +35,7 @@ flowchart LR
   pricing["pricing/<br/>Vol, greeks, model analytics"]
   calib["calibration/<br/>SVI fit and tenor nodes"]
   api["api/<br/>Websocket snapshots and patches"]
-  ui["ui/<br/>React dashboard"]
+  ui["this repo: ui/<br/>React/Vite dashboard"]
 
   md --> pricing
   pricing --> calib
@@ -38,6 +52,13 @@ calibration/    SVI calibration, RR/fly node construction, tenor interpolation
 market_data/    Exchange websocket clients, book/trade normalisation
 api/            Websocket API and snapshot/patch broadcaster
 ui/             This React/Vite dashboard
+```
+
+Boundary of this repository:
+
+```text
+Included:     React dashboard, chart rendering, websocket ingestion, static build/deploy config
+Not included: Exchange connectors, pricing models, SVI calibration jobs, persisted market data, API service
 ```
 
 Current repo layout:
@@ -57,6 +78,14 @@ Dockerfile                          Production frontend image
 nginx.conf                          Static serving and websocket proxy
 docker-compose.yml                  Frontend plus API local deployment
 ```
+
+## Technical Design Notes
+
+- The UI treats websocket payloads as snapshots or patches and merges them by expiry/tenor/strike rather than replacing whole surfaces on every tick.
+- Canvas rendering is used for dense, fast-moving smile and surface charts to avoid excessive DOM churn.
+- Bid/ask/last-trade points are animated and aged client-side so transient market updates do not appear as hard flicker.
+- Fit metrics, queue depth, dropped-message counts, render timings, and crash logs are exposed through a debug mode for operational diagnosis.
+- Configuration is environment-driven via `VITE_SVI_WS_URL`; production deployments should use `wss://...` or a same-origin HTTPS websocket proxy.
 
 ## Runtime Data Contract
 
@@ -131,7 +160,9 @@ dist/
 
 ## Docker
 
-Run the frontend and API container together:
+Docker is provided for local/containerised development. The current production-style deployment is expected to be a static build served from S3/CloudFront or another HTTPS static host.
+
+Run the frontend and API container together locally:
 
 ```bash
 docker compose up --build
@@ -178,6 +209,13 @@ VITE_SVI_WS_URL=wss://your-api.example.com/ws npm run build
 Upload the contents of `dist/`.
 
 Static hosting only serves the UI. The pricing API must still be reachable from the browser.
+
+For an S3-hosted deployment:
+
+- Serve the bucket through CloudFront or another HTTPS-capable CDN.
+- Build the UI with a secure websocket URL, for example `VITE_SVI_WS_URL=wss://api.your-domain/ws`.
+- If the API is currently only exposed as plain `ws://...`, put TLS in front of it first. A page loaded over `https://...` cannot connect to an insecure websocket endpoint.
+- Common API TLS options are an AWS Application Load Balancer with an ACM certificate, CloudFront in front of an HTTP websocket origin, or nginx/Caddy on the EC2 instance with a Let's Encrypt certificate.
 
 ## Export Into Another Repo
 
