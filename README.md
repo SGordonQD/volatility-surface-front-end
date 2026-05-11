@@ -1,29 +1,66 @@
-# Vol Surface
+# Crypto Options SVI Volatility Surface Dashboard
 
-Vol Surface is the realtime browser UI for a broader options pricing and calibration system. It consumes websocket snapshots and patches from a pricing-engine API, then visualises fitted SVI variance/volatility surfaces, quoted option smiles, risk-reversal and fly nodes, tenor slices, quote-vs-fit dislocations, and fit diagnostics.
+Vol Surface is a real-time crypto options dashboard for monitoring an SVI volatility surface inside a broader options pricing and calibration system. It consumes websocket snapshots and patches from a pricing-engine API, then visualises fitted SVI volatility surface slices, implied volatility term structure, options smile charts, risk reversal and fly nodes, tenor slices, quote-vs-fit dislocations, and fit diagnostics.
 
 Live dashboard: [dashboard.derivasys.com](https://dashboard.derivasys.com)
 
+The dashboard is designed for real-time market data from Deribit, Binance, OKX, and similar crypto options venues. Websocket ingestion keeps the fitted SVI volatility surface, implied volatility smiles, risk reversal term structure, and quote-vs-fit dislocation panels current as market data changes.
+
 This repository contains the `ui` layer only. Backend pricing, calibration, market-data normalisation, and websocket broadcasting services are expected to live in the wider engine stack.
 
-Although demonstrated on crypto options, the framework is designed around general pricing-system problems: constrained calibration, market data normalisation, curve/surface construction, risk generation, and trader-facing visualisation. These concepts transfer directly to rates curves, swaption surfaces, credit curves, and fixed income analytics.
+Although demonstrated on crypto options and crypto implied volatility workflows, the framework is designed around general pricing-system problems: constrained calibration, real-time market data normalisation, curve/surface construction, risk generation, and trader-facing visualisation. These concepts transfer directly to rates curves, swaption surfaces, credit curves, and fixed income analytics.
+
+## Repository Metadata
+
+Description: Real-time crypto options volatility surface analytics platform with live SVI fitting and multi-exchange market data ingestion.
+
+Topics: `svi`, `volatility-surface`, `crypto-options`, `deribit`, `implied-volatility`, `options-analytics`, `quant-finance`, `websockets`, `BTC`
+
+Currencies: `BTC`, `ETH`, `SOL`, `XRP`, `BNB`, `DOGE`, `ADA`, `AVAX`, `LTC`, and any other crypto options underlyings published by the websocket API through `available_ccys`.
+
+Tech stack: React, TypeScript, Vite, Canvas charts, Recharts, Framer Motion, Lucide React, CSS, WebSocket APIs, nginx, Docker, S3/CloudFront-compatible static deployment.
+
+## Documentation
+
+- [Architecture](docs/architecture.md): system flow from Deribit/Binance/OKX real-time market data through websocket ingestion into the SVI volatility surface dashboard.
+- [Scaling](docs/scaling.md): browser, API, and websocket scaling notes for high-frequency crypto options implied volatility updates.
+- [SVI Fitting](docs/svi-fitting.md): SVI volatility surface concepts, options smile inputs, risk reversal nodes, and fit-quality diagnostics.
 
 ## Demo Scope
 
-The dashboard is designed to run against a live websocket API. Without that API it can still be built, linted, and previewed, but the market-data panels will not populate.
+The crypto options dashboard is designed to run against a live websocket API that publishes real-time market data and calibrated SVI volatility surface updates. Without that API it can still be built, linted, and previewed, but the implied volatility, options smile, and market-data panels will not populate.
 
 Recommended screenshots before sharing publicly:
 
-- Surface monitor: variance/volatility term structure and fit diagnostics.
-- Smile matrix: per-expiry bid/ask/trade IV with Deribit/OKX overlays.
-- Risk grids: RR/fly nodes, tenor mode, and quote-through-fit heatmap.
+- Surface monitor: SVI volatility surface, implied volatility term structure, and fit diagnostics.
+- Smile matrix: per-expiry options smile bid/ask/trade implied volatility with Deribit, Binance, OKX, or other venue overlays.
+- Risk grids: risk reversal and fly nodes, tenor mode, and quote-through-fit heatmap.
+
+## Screenshots
+
+Store production screenshots in `docs/assets/screenshots/` as PNG or WebP files. Use descriptive filenames and alt text so search engines and readers understand the crypto options workflow being shown.
+
+Recommended screenshots:
+
+- `surface-monitor.png`: SVI volatility surface dashboard with live implied volatility term structure.
+- `options-smile-matrix.png`: per-expiry options smile charts with Deribit, Binance, OKX, or other exchange overlays.
+- `risk-reversal-grid.png`: risk reversal, fly, and quote-through-fit analytics for BTC or another active currency.
+
+Embed screenshots in this README after the files exist:
+
+```md
+![Crypto options SVI volatility surface dashboard](docs/assets/screenshots/surface-monitor.png)
+![Options smile implied volatility matrix](docs/assets/screenshots/options-smile-matrix.png)
+![Risk reversal analytics grid](docs/assets/screenshots/risk-reversal-grid.png)
+```
 
 ## What It Does
 
-- Displays live fitted SVI variance and volatility surfaces from the pricing engine.
-- Shows per-expiry smile charts with Deribit/OKX bid, ask, and last-trade IV points.
-- Tracks risk-reversal nodes, fly nodes, tenor rows, and RR/fly term structures.
-- Highlights quotes through the fitted SVI mid in the SVI-through matrix.
+- Displays a live fitted SVI volatility surface and variance surface from the pricing engine.
+- Shows per-expiry options smile charts with Deribit, Binance, OKX, or other venue bid, ask, and last-trade implied volatility points.
+- Tracks risk reversal nodes, fly nodes, tenor rows, and risk reversal/fly term structures.
+- Highlights quotes through the fitted SVI implied volatility mid in the SVI-through matrix.
+- Uses websocket ingestion to merge real-time market data snapshots and patches without replacing the whole crypto options surface on every tick.
 - Shows fit metrics such as current fit, last fit, elapsed fit time, feed state, and SVI push time.
 - Provides runtime diagnostics for websocket queue depth, dropped messages, render timing, and crash logs.
 - Supports first-visit data-quality/GDPR disclosure for externally shared deployments.
@@ -33,11 +70,11 @@ Recommended screenshots before sharing publicly:
 
 ```mermaid
 flowchart LR
-  md["market_data<br/>Exchange books, trades, futures"]
-  pricing["pricing/<br/>Vol, greeks, model analytics"]
-  calib["calibration/<br/>SVI fit and tenor nodes"]
-  api["api/<br/>Websocket snapshots and patches"]
-  ui["this repo: ui/<br/>React/Vite dashboard"]
+  md["market_data<br/>Deribit/Binance/OKX books, trades, futures"]
+  pricing["pricing/<br/>Crypto options vol, greeks, model analytics"]
+  calib["calibration/<br/>SVI volatility surface fit and tenor nodes"]
+  api["api/<br/>Real-time market data websocket snapshots and patches"]
+  ui["this repo: ui/<br/>React/Vite implied volatility dashboard"]
 
   md --> pricing
   pricing --> calib
@@ -49,18 +86,18 @@ flowchart LR
 Expected wider repo layout:
 
 ```text
-pricing/        Pricing models, greeks, SVI evaluation, quote analytics
-calibration/    SVI calibration, RR/fly node construction, tenor interpolation
-market_data/    Exchange websocket clients, book/trade normalisation
-api/            Websocket API and snapshot/patch broadcaster
-ui/             This React/Vite dashboard
+pricing/        Crypto options pricing models, greeks, implied volatility analytics
+calibration/    SVI volatility surface calibration, risk reversal/fly node construction, tenor interpolation
+market_data/    Deribit/Binance/OKX websocket clients, book/trade normalisation
+api/            Websocket API and real-time market data snapshot/patch broadcaster
+ui/             This React/Vite implied volatility dashboard
 ```
 
 Boundary of this repository:
 
 ```text
-Included:     React dashboard, chart rendering, websocket ingestion, static build/deploy config
-Not included: Exchange connectors, pricing models, SVI calibration jobs, persisted market data, API service
+Included:     React crypto options dashboard, chart rendering, websocket ingestion, static build/deploy config
+Not included: Exchange connectors, pricing models, SVI volatility surface calibration jobs, persisted market data, API service
 ```
 
 Current repo layout:
@@ -74,6 +111,9 @@ src/lib/svi-types.ts                Stream and chart TypeScript types
 src/components/CanvasCharts.tsx     Canvas-based smile and variance charts
 src/components/Surface3DCanvas.tsx  3D surface renderer
 src/components/AppErrorBoundary.tsx Runtime crash boundary
+docs/architecture.md                Architecture and data-flow notes
+docs/scaling.md                     Scaling and websocket ingestion notes
+docs/svi-fitting.md                 SVI fitting and implied volatility notes
 public/derivasys.svg                Browser favicon
 scripts/export-dist.sh              Copies build output into another repo
 Dockerfile                          Production frontend image
@@ -83,15 +123,15 @@ docker-compose.yml                  Frontend plus API local deployment
 
 ## Technical Design Notes
 
-- The UI treats websocket payloads as snapshots or patches and merges them by expiry/tenor/strike rather than replacing whole surfaces on every tick.
-- Canvas rendering is used for dense, fast-moving smile and surface charts to avoid excessive DOM churn.
+- The websocket ingestion layer treats real-time market data payloads as snapshots or patches and merges them by expiry/tenor/strike rather than replacing whole SVI volatility surfaces on every tick.
+- Canvas rendering is used for dense, fast-moving options smile, implied volatility, and SVI volatility surface charts to avoid excessive DOM churn.
 - Bid/ask/last-trade points are animated and aged client-side so transient market updates do not appear as hard flicker.
-- Fit metrics, queue depth, dropped-message counts, render timings, and crash logs are exposed through a debug mode for operational diagnosis.
+- Fit metrics, risk reversal diagnostics, queue depth, dropped-message counts, render timings, and crash logs are exposed through a debug mode for operational diagnosis.
 - Configuration is environment-driven via `VITE_SVI_WS_URL`; production deployments should use `wss://...` or a same-origin HTTPS websocket proxy.
 
 ## Runtime Data Contract
 
-The UI expects the API to stream JSON websocket messages. Supported message families include:
+The UI expects the crypto options API to stream JSON websocket messages for real-time market data, implied volatility points, options smile updates, and fitted SVI volatility surface state. Supported message families include:
 
 - `svi_surface_snapshot`
 - `svi_surface_patch`
@@ -104,7 +144,7 @@ The UI expects the API to stream JSON websocket messages. Supported message fami
 - `surface_fit_status`
 - `svi_fly_patch`
 
-The preferred surface format is schema version `1`, with per-expiry smiles, `x_axis`, `var`, `vol`, risk-reversal nodes, fly nodes, and tenor rows.
+The preferred surface format is schema version `1`, with per-expiry options smiles, `x_axis`, `var`, `vol`, implied volatility points, risk reversal nodes, fly nodes, and tenor rows.
 
 ## Requirements
 
