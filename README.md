@@ -2,6 +2,8 @@
 
 Vol Surface is the realtime browser UI for a broader options pricing and calibration system. It consumes websocket snapshots and patches from a pricing-engine API, then visualises fitted SVI variance/volatility surfaces, quoted option smiles, risk-reversal and fly nodes, tenor slices, quote-vs-fit dislocations, and fit diagnostics.
 
+Live dashboard: [dashboard.derivasys.com](https://dashboard.derivasys.com)
+
 This repository contains the `ui` layer only. Backend pricing, calibration, market-data normalisation, and websocket broadcasting services are expected to live in the wider engine stack.
 
 Although demonstrated on crypto options, the framework is designed around general pricing-system problems: constrained calibration, market data normalisation, curve/surface construction, risk generation, and trader-facing visualisation. These concepts transfer directly to rates curves, swaption surfaces, credit curves, and fixed income analytics.
