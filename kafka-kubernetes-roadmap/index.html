@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kafka and Kubernetes Roadmap for Crypto Options Analytics | DerivaSys</title>
+    <meta
+      name="description"
+      content="How DerivaSys can evolve toward Kafka and Kubernetes for BTC, ETH, and altcoin options market-data ingestion, SVI calibration, websocket fanout, and resilient operations."
+    />
+    <meta
+      name="keywords"
+      content="Kafka crypto options, Kubernetes volatility surface, BTC options streaming, ETH options streaming, altcoin options analytics, SVI calibration pipeline, K8s roadmap"
+    />
+    <meta
+      name="robots"
+      content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1"
+    />
+    <link rel="canonical" href="https://dashboard.derivasys.com/kafka-kubernetes-roadmap/" />
+    <link rel="icon" type="image/svg+xml" href="/derivasys.svg" />
+    <link rel="stylesheet" href="/seo-pages.css" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="DerivaSys" />
+    <meta property="og:title" content="Kafka and Kubernetes Roadmap for Crypto Options Analytics | DerivaSys" />
+    <meta
+      property="og:description"
+      content="The next architecture step for DerivaSys: Kafka topics, Kubernetes workloads, calibration workers, and websocket fanout."
+    />
+    <meta property="og:url" content="https://dashboard.derivasys.com/kafka-kubernetes-roadmap/" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta property="og:image" content="https://dashboard.derivasys.com/og/derivasys-surface-card.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="DerivaSys volatility surface dashboard preview" />
+    <meta name="twitter:image" content="https://dashboard.derivasys.com/og/derivasys-surface-card.png" />
+    <meta name="twitter:image:alt" content="DerivaSys volatility surface dashboard preview" />
+    <!-- Google tag (gtag.js) -->
+    <script
+      async
+      src="https://www.googletagmanager.com/gtag/js?id=G-W5S4S464RQ"
+    ></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag("js", new Date());
+      gtag("config", "G-W5S4S464RQ");
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Article",
+        "headline": "Kafka and Kubernetes Roadmap for Crypto Options Analytics",
+        "description": "How DerivaSys can evolve toward Kafka and Kubernetes for BTC, ETH, and altcoin options market-data ingestion, SVI calibration, websocket fanout, and resilient operations.",
+        "url": "https://dashboard.derivasys.com/kafka-kubernetes-roadmap/",
+        "mainEntityOfPage": "https://dashboard.derivasys.com/kafka-kubernetes-roadmap/",
+        "author": {
+          "@type": "Person",
+          "name": "Sean Gordon"
+        },
+        "datePublished": "2026-05-11T00:00:00+01:00",
+        "dateModified": "2026-05-13T00:00:00+01:00",
+        "image": [
+          "https://dashboard.derivasys.com/og/derivasys-surface-card.png",
+          "https://dashboard.derivasys.com/diagrams/kafka-kubernetes-roadmap.svg"
+        ],
+        "keywords": [
+          "Kafka",
+          "Kubernetes",
+          "BTC options streaming",
+          "ETH options streaming",
+          "altcoin options analytics",
+          "SVI calibration pipeline"
+        ],
+        "publisher": {
+          "@type": "Organization",
+          "name": "DerivaSys",
+          "url": "https://dashboard.derivasys.com/",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://dashboard.derivasys.com/derivasys.svg"
+          }
+        }
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Dashboard",
+            "item": "https://dashboard.derivasys.com/"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "Kafka and Kubernetes Roadmap",
+            "item": "https://dashboard.derivasys.com/kafka-kubernetes-roadmap/"
+          }
+        ]
+      }
+    </script>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="topbar" data-seo-header>
+        <button
+          class="nav-toggle"
+          type="button"
+          aria-label="Project links"
+          aria-expanded="false"
+          aria-controls="project-links-menu"
+          data-menu-toggle
+        >
+          <span class="nav-toggle__bar" aria-hidden="true"></span>
+          <span class="nav-toggle__bar" aria-hidden="true"></span>
+          <span class="nav-toggle__bar" aria-hidden="true"></span>
+        </button>
+        <a class="brand-lockup" href="/" aria-label="DerivaSys dashboard">
+          <svg
+            class="brand-lockup__mark"
+            viewBox="0 0 64 64"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
+          >
+            <rect x="4" y="4" width="56" height="56" stroke="#4f669f" stroke-width="4" />
+            <path
+              d="M14 42L28 28L39 39L53 25"
+              stroke="#4f669f"
+              stroke-width="4"
+              stroke-linecap="square"
+              stroke-linejoin="miter"
+            />
+            <path d="M45 25H53V33" stroke="#4f669f" stroke-width="4" stroke-linecap="square" />
+          </svg>
+          <span class="brand-lockup__text">
+            <span class="brand-lockup__eyebrow">Surface monitor</span>
+            <span class="brand-lockup__title">Derivasys</span>
+          </span>
+        </a>
+        <nav id="project-links-menu" class="nav-links" aria-label="Project links">
+          <a href="/">Dashboard</a>
+          <a href="/crypto-options-volatility-surface/">Crypto options</a>
+          <a href="/explainer/">Explainer</a>
+          <a href="/what-is-svi/">What is SVI</a>
+          <a href="/methodology/">Methodology</a>
+          <a href="/real-time-volatility-surface/">Real-time surface</a>
+          <a href="/arbitrage-constraints/">Arb constraints</a>
+          <a href="/aws-architecture/">AWS architecture</a>
+          <a href="/kafka-kubernetes-roadmap/" class="active" aria-current="page">Kafka/K8s roadmap</a>
+          <a href="https://medium.com/@gdnaes/building-a-real-time-crypto-volatility-surface-system-2435b6be2f93" target="_blank" rel="noreferrer">Medium</a>
+          <a href="https://dev.to/gdnaes/building-a-real-time-crypto-volatility-surface-system-3nbf" target="_blank" rel="noreferrer">DEV</a>
+          <a href="https://github.com/SGordonQD/volatility-surface-front-end" target="_blank" rel="noreferrer">GitHub</a>
+          <a href="mailto:gdnaes@gmail.com?subject=DerivaSys%20volatility%20surface">Contact</a>
+        </nav>
+      </header>
+
+      <main>
+        <section class="hero">
+          <div class="eyebrow">Roadmap</div>
+          <h1>Kafka and Kubernetes roadmap</h1>
+          <p>
+            The next generation of the platform should separate stream ingestion,
+            calibration, storage, and websocket fanout. Kafka provides the event
+            backbone; Kubernetes gives each service a scalable runtime boundary.
+          </p>
+          <div class="hero-actions">
+            <a class="primary" href="/aws-architecture/">Read the AWS architecture</a>
+            <a class="secondary" href="/">Open the dashboard</a>
+          </div>
+          <figure class="diagram-figure">
+            <img
+              src="/diagrams/kafka-kubernetes-roadmap.svg"
+              alt="Kafka and Kubernetes roadmap diagram showing exchange ingestion pods, Kafka topics, analytics workers, websocket gateways, and the dashboard"
+              width="1120"
+              height="560"
+              loading="eager"
+              fetchpriority="high"
+            />
+            <figcaption>
+              Kafka separates replayable market-data streams from slower calibration work,
+              while Kubernetes lets ingestion, analytics, and websocket fanout scale independently.
+            </figcaption>
+          </figure>
+        </section>
+
+        <section class="content-grid">
+          <article class="panel">
+            <h2>1. Kafka as the market-data backbone</h2>
+            <p>
+              Exchange connectors publish normalized BTC, ETH, and altcoin
+              option book, trade, future, and index updates into Kafka topics.
+              Downstream consumers can replay, inspect, and recover from those
+              topics without coupling every service directly to each exchange.
+            </p>
+
+            <h2>2. Topic design</h2>
+            <p>
+              A pragmatic topic model separates raw exchange events, normalized
+              option quotes, forward context, fitted SVI surfaces, risk nodes,
+              fit diagnostics, and websocket-ready patches. Keys should include
+              currency, expiry, strike, venue, and instrument where relevant.
+            </p>
+
+            <h2>3. Kubernetes workloads</h2>
+            <p>
+              In Kubernetes, ingestion pods, calibration workers, API gateways,
+              and websocket broadcasters can scale independently. Calibration
+              workers scale with fit latency and topic lag, while websocket
+              gateways scale with connected users and fanout pressure.
+            </p>
+
+            <h2>4. Reliability model</h2>
+            <p>
+              Kafka offsets make replay and recovery explicit. Kubernetes
+              readiness checks should fail when a worker is stale, unable to
+              reach Kafka, or publishing fits that violate quality thresholds.
+              Dead-letter topics preserve bad payloads for inspection.
+            </p>
+
+            <h2>5. What changes for the UI</h2>
+            <p>
+              The browser should still receive compact websocket snapshots and
+              patches. Kafka and K8s change the reliability and scaling of the
+              backend, not the trader-facing contract: the UI remains focused on
+              current surface state, RR/fly nodes, quote overlays, and fit health.
+            </p>
+          </article>
+
+          <aside class="stats">
+            <div class="panel">
+              <strong>Why Kafka</strong>
+              <p>
+                It gives the pricing stack replayable market-data history and
+                separates fast exchange ingestion from slower calibration work.
+              </p>
+            </div>
+            <div class="panel">
+              <strong>Why Kubernetes</strong>
+              <p>
+                It gives each runtime boundary clear scaling, health checks,
+                deployment rollout, and resource isolation.
+              </p>
+            </div>
+            <div class="panel">
+              <strong>Related pages</strong>
+              <div class="section-links">
+                <a href="/aws-architecture/">
+                  AWS Architecture
+                  <span>The cloud deployment shape this roadmap builds on.</span>
+                </a>
+                <a href="/arbitrage-constraints/">
+                  Arb Constraints
+                  <span>How fit quality and no-arbitrage diagnostics are monitored.</span>
+                </a>
+              </div>
+            </div>
+          </aside>
+        </section>
+
+        <p class="footer-note">
+          This roadmap describes the next backend evolution for the volatility
+          surface stack. For project questions, contact Sean Gordon at
+          <a href="mailto:gdnaes@gmail.com?subject=DerivaSys%20volatility%20surface">gdnaes@gmail.com</a>.
+        </p>
+      </main>
+    </div>
+    <script src="/seo-header.js" defer></script>
+  </body>
+</html>

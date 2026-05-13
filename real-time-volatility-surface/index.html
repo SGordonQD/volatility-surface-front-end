@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Real-Time Crypto Options Volatility Surface | DerivaSys</title>
+    <meta
+      name="description"
+      content="Explore how the DerivaSys live dashboard tracks real-time BTC, ETH, and altcoin crypto options volatility surfaces, venue overlays, skew, term structure, risk nodes, and fit diagnostics."
+    />
+    <meta
+      name="keywords"
+      content="real-time BTC options, real-time ETH options, altcoin options monitor, crypto options volatility surface, live implied volatility, SVI dashboard"
+    />
+    <meta
+      name="robots"
+      content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1"
+    />
+    <link
+      rel="canonical"
+      href="https://dashboard.derivasys.com/real-time-volatility-surface/"
+    />
+    <link rel="icon" type="image/svg+xml" href="/derivasys.svg" />
+    <link rel="stylesheet" href="/seo-pages.css" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="DerivaSys" />
+    <meta property="og:title" content="Real-Time Crypto Options Volatility Surface | DerivaSys" />
+    <meta
+      property="og:description"
+      content="A guide to reading the DerivaSys live BTC, ETH, and altcoin crypto options surface dashboard and the analytics published around each fit."
+    />
+    <meta
+      property="og:url"
+      content="https://dashboard.derivasys.com/real-time-volatility-surface/"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta property="og:image" content="https://dashboard.derivasys.com/og/derivasys-surface-card.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="DerivaSys volatility surface dashboard preview" />
+    <meta name="twitter:image" content="https://dashboard.derivasys.com/og/derivasys-surface-card.png" />
+    <meta name="twitter:image:alt" content="DerivaSys volatility surface dashboard preview" />
+    <!-- Google tag (gtag.js) -->
+    <script
+      async
+      src="https://www.googletagmanager.com/gtag/js?id=G-W5S4S464RQ"
+    ></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag("js", new Date());
+      gtag("config", "G-W5S4S464RQ");
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Article",
+        "headline": "Real-Time Crypto Options Volatility Surface",
+        "description": "How the DerivaSys dashboard visualizes live fitted BTC, ETH, and altcoin crypto options volatility surfaces and related smile diagnostics.",
+        "url": "https://dashboard.derivasys.com/real-time-volatility-surface/",
+        "mainEntityOfPage": "https://dashboard.derivasys.com/real-time-volatility-surface/",
+        "author": {
+          "@type": "Person",
+          "name": "Sean Gordon"
+        },
+        "datePublished": "2026-05-11T00:00:00+01:00",
+        "dateModified": "2026-05-13T00:00:00+01:00",
+        "image": [
+          "https://dashboard.derivasys.com/og/derivasys-surface-card.png",
+          "https://dashboard.derivasys.com/screenshots/dashboard-risk-analytics.png"
+        ],
+        "keywords": [
+          "real-time BTC options",
+          "real-time ETH options",
+          "altcoin options monitor",
+          "crypto options volatility surface",
+          "SVI dashboard"
+        ],
+        "publisher": {
+          "@type": "Organization",
+          "name": "DerivaSys",
+          "url": "https://dashboard.derivasys.com/",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://dashboard.derivasys.com/derivasys.svg"
+          }
+        }
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Dashboard",
+            "item": "https://dashboard.derivasys.com/"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "Real-Time Volatility Surface",
+            "item": "https://dashboard.derivasys.com/real-time-volatility-surface/"
+          }
+        ]
+      }
+    </script>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="topbar" data-seo-header>
+        <button
+          class="nav-toggle"
+          type="button"
+          aria-label="Project links"
+          aria-expanded="false"
+          aria-controls="project-links-menu"
+          data-menu-toggle
+        >
+          <span class="nav-toggle__bar" aria-hidden="true"></span>
+          <span class="nav-toggle__bar" aria-hidden="true"></span>
+          <span class="nav-toggle__bar" aria-hidden="true"></span>
+        </button>
+        <a class="brand-lockup" href="/" aria-label="DerivaSys dashboard">
+          <svg
+            class="brand-lockup__mark"
+            viewBox="0 0 64 64"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
+          >
+            <rect x="4" y="4" width="56" height="56" stroke="#4f669f" stroke-width="4" />
+            <path
+              d="M14 42L28 28L39 39L53 25"
+              stroke="#4f669f"
+              stroke-width="4"
+              stroke-linecap="square"
+              stroke-linejoin="miter"
+            />
+            <path d="M45 25H53V33" stroke="#4f669f" stroke-width="4" stroke-linecap="square" />
+          </svg>
+          <span class="brand-lockup__text">
+            <span class="brand-lockup__eyebrow">Surface monitor</span>
+            <span class="brand-lockup__title">Derivasys</span>
+          </span>
+        </a>
+        <nav id="project-links-menu" class="nav-links" aria-label="Project links">
+          <a href="/">Dashboard</a>
+          <a href="/crypto-options-volatility-surface/">Crypto options</a>
+          <a href="/explainer/">Explainer</a>
+          <a href="/what-is-svi/">What is SVI</a>
+          <a href="/methodology/">Methodology</a>
+          <a href="/real-time-volatility-surface/" class="active" aria-current="page">Real-time surface</a>
+          <a href="/arbitrage-constraints/">Arb constraints</a>
+          <a href="/aws-architecture/">AWS architecture</a>
+          <a href="/kafka-kubernetes-roadmap/">Kafka/K8s roadmap</a>
+          <a href="https://medium.com/@gdnaes/building-a-real-time-crypto-volatility-surface-system-2435b6be2f93" target="_blank" rel="noreferrer">Medium</a>
+          <a href="https://dev.to/gdnaes/building-a-real-time-crypto-volatility-surface-system-3nbf" target="_blank" rel="noreferrer">DEV</a>
+          <a href="https://github.com/SGordonQD/volatility-surface-front-end" target="_blank" rel="noreferrer">GitHub</a>
+          <a href="mailto:gdnaes@gmail.com?subject=DerivaSys%20volatility%20surface">Contact</a>
+        </nav>
+      </header>
+
+      <main>
+        <section class="hero">
+          <div class="eyebrow">Runtime View</div>
+          <h1>Real-time volatility surface</h1>
+          <p>
+            The DerivaSys dashboard is designed for live BTC, ETH, and altcoin
+            options surface monitoring. It combines fitted variance and
+            volatility views with exchange overlays, risk nodes, tenor
+            interpolation, and fit diagnostics so the surface can be interpreted
+            in trading context rather than as a standalone curve.
+          </p>
+          <div class="hero-actions">
+            <a class="primary" href="/">View the live dashboard</a>
+            <a class="secondary" href="/methodology/">Read the methodology</a>
+          </div>
+          <div class="hero-grid">
+            <div class="panel">
+              <strong>Surface view</strong>
+              <p>
+                Track the fitted smile shape across expiries as variance or
+                implied volatility, including the 3D surface projection.
+              </p>
+            </div>
+            <div class="panel">
+              <strong>Quote overlays</strong>
+              <p>
+                Compare the fit against bid, ask, and traded levels, including
+                venue-specific overlays from connected exchanges.
+              </p>
+            </div>
+            <div class="panel">
+              <strong>Risk monitoring</strong>
+              <p>
+                Review RR and fly grids, tenor rows, and fit-health messages to
+                understand the surface beyond a single chart.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section class="content-grid">
+          <article class="panel">
+            <h2>What the live dashboard is showing</h2>
+            <p>
+              The dashboard starts with a fitted surface and then layers live
+              market context on top of it. That includes quoted option points by
+              exchange, tenor summaries, node-level views, and calibration
+              health indicators that can explain why a shape changed.
+            </p>
+
+            <h2>Core panels</h2>
+            <ul>
+              <li>Variance and volatility smile curves by expiry</li>
+              <li>Interactive 3D surface view for vol or variance</li>
+              <li>Smile matrices with bid, ask, and last-trade IV points</li>
+              <li>RR and fly grids in expiry and tenor modes</li>
+              <li>Fit diagnostics and g-test style fit views</li>
+            </ul>
+            <figure class="screenshot-figure">
+              <img
+                src="/screenshots/risk-reversal-fly-panels.png"
+                alt="DerivaSys dashboard view with risk reversal, fly, node volatility, and fly-node panels"
+                width="1440"
+                height="1120"
+                loading="lazy"
+              />
+              <figcaption>
+                The real-time view combines live grids, charted term structures,
+                fitted node views, and quote-through-fit diagnostics in one workflow.
+              </figcaption>
+            </figure>
+
+            <h2>What RR and flies mean</h2>
+            <p>
+              RR means risk reversal. It summarizes skew by comparing implied
+              volatility on an upside call wing with implied volatility on a
+              downside put wing at the same delta or moneyness bucket. A fly
+              summarizes curvature: how expensive the wings are versus the ATM
+              area of the smile. Together, RR and fly nodes make BTC, ETH, and
+              altcoin smile shape easier to scan than raw strike-by-strike IV.
+            </p>
+
+            <h2>What the Fit tab shows</h2>
+            <p>
+              The Fit tab shows the fitted variance view, fitted volatility
+              view, 3D surface projection, and g-test diagnostics published by
+              the engine. Those diagnostics are how the UI exposes arbitrage
+              conditions: butterfly-style smile checks, calendar consistency
+              across expiries, and fit-error movement over time. The variance
+              lines are total implied variance slices by expiry, which are the
+              native SVI fit objects before conversion back into volatility.
+            </p>
+
+            <h2>Why real time matters</h2>
+            <p>
+              Surface quality is not static. Quotes move, liquidity shifts, and
+              venue overlays can disagree. A real-time dashboard makes it easier
+              to distinguish structural repricing from transient dislocation,
+              stale venue levels, or temporary calibration stress.
+            </p>
+
+            <h2>How updates are delivered</h2>
+            <p>
+              The UI is driven by websocket snapshots and patches. Full
+              snapshots establish the current state, while sparse patches update
+              only the expiries or derived views that changed. That keeps the
+              dashboard responsive under live market conditions.
+            </p>
+
+            <h2>Who this is for</h2>
+            <p>
+              The page is aimed at anyone monitoring an options surface in
+              production: traders, quants, risk managers, and engineers who
+              need to see both the market and the fit at the same time.
+            </p>
+          </article>
+
+          <aside class="stats">
+            <div class="panel">
+              <strong>Good surface monitoring means</strong>
+              <p>
+                Watching level, skew, curvature, venue disagreement, and fit
+                health together instead of reading a single chart in isolation.
+              </p>
+            </div>
+            <div class="panel">
+              <strong>Useful companion reads</strong>
+              <div class="section-links">
+                <a href="/what-is-svi/">
+                  What Is SVI
+                  <span>The parameterization behind the smile and surface fit.</span>
+                </a>
+                <a href="/methodology/">
+                  Methodology
+                  <span>The workflow that transforms raw option quotes into live analytics.</span>
+                </a>
+              </div>
+            </div>
+          </aside>
+        </section>
+
+        <p class="footer-note">
+          These pages provide indexable context around the live dashboard,
+          helping search engines and human readers understand what the product
+          actually does. For project questions, contact Sean Gordon at
+          <a href="mailto:gdnaes@gmail.com?subject=DerivaSys%20volatility%20surface">gdnaes@gmail.com</a>.
+        </p>
+      </main>
+    </div>
+    <script src="/seo-header.js" defer></script>
+  </body>
+</html>

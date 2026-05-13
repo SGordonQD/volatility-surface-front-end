@@ -1,41 +1,92 @@
-# Vol Surface
+# Crypto Options SVI Volatility Surface Dashboard
 
-Vol Surface is the realtime browser UI for a broader options pricing and calibration system. It consumes websocket snapshots and patches from a pricing-engine API, then visualises fitted SVI variance/volatility surfaces, quoted option smiles, risk-reversal and fly nodes, tenor slices, quote-vs-fit dislocations, and fit diagnostics.
+Vol Surface is a real-time crypto options dashboard for monitoring an SVI volatility surface inside a broader options pricing and calibration system. It consumes websocket snapshots and patches from a pricing-engine API, then visualises fitted SVI volatility surface slices, implied volatility term structure, options smile charts, risk reversal and fly nodes, tenor slices, quote-vs-fit dislocations, and fit diagnostics.
+
+Live dashboard: [dashboard.derivasys.com](https://dashboard.derivasys.com)
+
+The dashboard is designed for real-time market data from Deribit, Binance, OKX, and similar crypto options venues. Websocket ingestion keeps the fitted SVI volatility surface, implied volatility smiles, risk reversal term structure, and quote-vs-fit dislocation panels current as market data changes.
 
 This repository contains the `ui` layer only. Backend pricing, calibration, market-data normalisation, and websocket broadcasting services are expected to live in the wider engine stack.
 
-Although demonstrated on crypto options, the framework is designed around general pricing-system problems: constrained calibration, market data normalisation, curve/surface construction, risk generation, and trader-facing visualisation. These concepts transfer directly to rates curves, swaption surfaces, credit curves, and fixed income analytics.
+Although demonstrated on crypto options and crypto implied volatility workflows, the framework is designed around general pricing-system problems: constrained calibration, real-time market data normalisation, curve/surface construction, risk generation, and trader-facing visualisation. These concepts transfer directly to rates curves, swaption surfaces, credit curves, and fixed income analytics.
+
+## Repository Metadata
+
+Description: Real-time crypto options volatility surface analytics platform with live SVI fitting and multi-exchange market data ingestion.
+
+Topics: `svi`, `volatility-surface`, `crypto-options`, `deribit`, `implied-volatility`, `options-analytics`, `quant-finance`, `websockets`, `BTC`
+
+Underlyings: designed for `BTC`, `ETH`, and altcoin crypto options surfaces published by the websocket API as the active feed.
+
+Tech stack: React, TypeScript, Vite, Canvas charts, Recharts, Framer Motion, Lucide React, CSS, WebSocket APIs, nginx, Docker, S3/CloudFront-compatible static deployment.
+
+## Documentation
+
+- [Architecture](docs/architecture.md): system flow from Deribit/Binance/OKX real-time market data through websocket ingestion into the SVI volatility surface dashboard.
+- [Scaling](docs/scaling.md): browser, API, and websocket scaling notes for high-frequency crypto options implied volatility updates.
+- [SVI Fitting](docs/svi-fitting.md): SVI volatility surface concepts, options smile inputs, risk reversal nodes, and fit-quality diagnostics.
 
 ## Demo Scope
 
-The dashboard is designed to run against a live websocket API. Without that API it can still be built, linted, and previewed, but the market-data panels will not populate.
+The crypto options dashboard is designed to run against a live websocket API that publishes real-time market data and calibrated SVI volatility surface updates. Without that API it can still be built, linted, and previewed, but the implied volatility, options smile, and market-data panels will not populate.
 
 Recommended screenshots before sharing publicly:
 
-- Surface monitor: variance/volatility term structure and fit diagnostics.
-- Smile matrix: per-expiry bid/ask/trade IV with Deribit/OKX overlays.
-- Risk grids: RR/fly nodes, tenor mode, and quote-through-fit heatmap.
+- Surface monitor: SVI volatility surface, implied volatility term structure, and fit diagnostics.
+- Smile matrix: per-expiry options smile bid/ask/trade implied volatility with Deribit, Binance, OKX, or other venue overlays.
+- Risk grids: risk reversal and fly nodes, tenor mode, and quote-through-fit heatmap.
+
+## Screenshots
+
+Screenshots are stored in `public/screenshots/` so they work in the deployed information pages and in this README.
+
+![Risk reversal, node-vol, fly, and fly-node analytics](public/screenshots/risk-reversal-fly-panels.png)
+
+![SVI-through matrix showing bid and ask levels through the fitted surface](public/screenshots/through-fit-matrix.png)
 
 ## What It Does
 
-- Displays live fitted SVI variance and volatility surfaces from the pricing engine.
-- Shows per-expiry smile charts with Deribit/OKX bid, ask, and last-trade IV points.
-- Tracks risk-reversal nodes, fly nodes, tenor rows, and RR/fly term structures.
-- Highlights quotes through the fitted SVI mid in the SVI-through matrix.
+- Displays a live fitted SVI volatility surface and variance surface from the pricing engine.
+- Shows per-expiry options smile charts with Deribit, Binance, OKX, or other venue bid, ask, and last-trade implied volatility points.
+- Tracks risk reversal nodes, fly nodes, tenor rows, and risk reversal/fly term structures.
+- Highlights quotes through the fitted SVI implied volatility mid in the SVI-through matrix.
+- Uses websocket ingestion to merge real-time market data snapshots and patches without replacing the whole crypto options surface on every tick.
 - Shows fit metrics such as current fit, last fit, elapsed fit time, feed state, and SVI push time.
 - Provides runtime diagnostics for websocket queue depth, dropped messages, render timing, and crash logs.
 - Supports first-visit data-quality/GDPR disclosure for externally shared deployments.
 - Deploys as a static Vite build, suitable for S3/CloudFront or another HTTPS-capable static host.
 
+## MVP And AWS Scaling Path
+
+The current MVP keeps the browser layer deliberately simple. This repository builds a static React/Vite dashboard, connects to one websocket API, receives the current active BTC, ETH, or altcoin options surface, and merges snapshots and patches in the browser. The pricing engine remains responsible for exchange ingestion, quote normalization, SVI calibration, risk reversal/fly construction, and fit diagnostics.
+
+In MVP form, the deployment shape is:
+
+- `S3 + CloudFront`: serve the static dashboard over HTTPS.
+- `Websocket API`: publish compact surface snapshots and patches over WSS.
+- `Pricing/calibration services`: run behind the API boundary, away from the browser.
+- `CloudWatch/logging`: track feed freshness, fit latency, websocket reconnects, queue depth, and dropped messages.
+
+As usage and market-data volume grow, the backend can scale without changing the UI contract. ECS is the pragmatic first AWS step for separate ingestion, calibration, and websocket services. EKS becomes more useful when the system needs independently scaling stream processors, calibration workers, websocket gateways, health checks, and controlled rollouts.
+
+The next evolution is Kafka plus Kubernetes: exchange connectors publish replayable market-data events into Kafka topics, calibration workers consume normalized quote streams, and websocket gateways fan out compact dashboard-ready patches. The browser still receives the same snapshots and patches; Kafka and K8s improve resilience, replay, and operational scaling behind that boundary.
+
+![AWS architecture for the DerivaSys volatility surface dashboard](public/diagrams/aws-architecture.svg)
+
+More detail:
+
+- [AWS Architecture](aws-architecture/index.html): how the static frontend, websocket API, runtime services, secrets, and observability fit together.
+- [Kafka/Kubernetes Roadmap](kafka-kubernetes-roadmap/index.html): how the backend can evolve toward replayable market-data streams and independently scalable workers.
+
 ## Architecture
 
 ```mermaid
 flowchart LR
-  md["market_data<br/>Exchange books, trades, futures"]
-  pricing["pricing/<br/>Vol, greeks, model analytics"]
-  calib["calibration/<br/>SVI fit and tenor nodes"]
-  api["api/<br/>Websocket snapshots and patches"]
-  ui["this repo: ui/<br/>React/Vite dashboard"]
+  md["market_data<br/>Deribit/Binance/OKX books, trades, futures"]
+  pricing["pricing/<br/>Crypto options vol, greeks, model analytics"]
+  calib["calibration/<br/>SVI volatility surface fit and tenor nodes"]
+  api["api/<br/>Real-time market data websocket snapshots and patches"]
+  ui["this repo: ui/<br/>React/Vite implied volatility dashboard"]
 
   md --> pricing
   pricing --> calib
@@ -47,18 +98,18 @@ flowchart LR
 Expected wider repo layout:
 
 ```text
-pricing/        Pricing models, greeks, SVI evaluation, quote analytics
-calibration/    SVI calibration, RR/fly node construction, tenor interpolation
-market_data/    Exchange websocket clients, book/trade normalisation
-api/            Websocket API and snapshot/patch broadcaster
-ui/             This React/Vite dashboard
+pricing/        Crypto options pricing models, greeks, implied volatility analytics
+calibration/    SVI volatility surface calibration, risk reversal/fly node construction, tenor interpolation
+market_data/    Deribit/Binance/OKX websocket clients, book/trade normalisation
+api/            Websocket API and real-time market data snapshot/patch broadcaster
+ui/             This React/Vite implied volatility dashboard
 ```
 
 Boundary of this repository:
 
 ```text
-Included:     React dashboard, chart rendering, websocket ingestion, static build/deploy config
-Not included: Exchange connectors, pricing models, SVI calibration jobs, persisted market data, API service
+Included:     React crypto options dashboard, chart rendering, websocket ingestion, static build/deploy config
+Not included: Exchange connectors, pricing models, SVI volatility surface calibration jobs, persisted market data, API service
 ```
 
 Current repo layout:
@@ -72,6 +123,9 @@ src/lib/svi-types.ts                Stream and chart TypeScript types
 src/components/CanvasCharts.tsx     Canvas-based smile and variance charts
 src/components/Surface3DCanvas.tsx  3D surface renderer
 src/components/AppErrorBoundary.tsx Runtime crash boundary
+docs/architecture.md                Architecture and data-flow notes
+docs/scaling.md                     Scaling and websocket ingestion notes
+docs/svi-fitting.md                 SVI fitting and implied volatility notes
 public/derivasys.svg                Browser favicon
 scripts/export-dist.sh              Copies build output into another repo
 Dockerfile                          Production frontend image
@@ -81,15 +135,15 @@ docker-compose.yml                  Frontend plus API local deployment
 
 ## Technical Design Notes
 
-- The UI treats websocket payloads as snapshots or patches and merges them by expiry/tenor/strike rather than replacing whole surfaces on every tick.
-- Canvas rendering is used for dense, fast-moving smile and surface charts to avoid excessive DOM churn.
+- The websocket ingestion layer treats real-time market data payloads as snapshots or patches and merges them by expiry/tenor/strike rather than replacing whole SVI volatility surfaces on every tick.
+- Canvas rendering is used for dense, fast-moving options smile, implied volatility, and SVI volatility surface charts to avoid excessive DOM churn.
 - Bid/ask/last-trade points are animated and aged client-side so transient market updates do not appear as hard flicker.
-- Fit metrics, queue depth, dropped-message counts, render timings, and crash logs are exposed through a debug mode for operational diagnosis.
+- Fit metrics, risk reversal diagnostics, queue depth, dropped-message counts, render timings, and crash logs are exposed through a debug mode for operational diagnosis.
 - Configuration is environment-driven via `VITE_SVI_WS_URL`; production deployments should use `wss://...` or a same-origin HTTPS websocket proxy.
 
 ## Runtime Data Contract
 
-The UI expects the API to stream JSON websocket messages. Supported message families include:
+The UI expects the crypto options API to stream JSON websocket messages for real-time market data, implied volatility points, options smile updates, and fitted SVI volatility surface state. Supported message families include:
 
 - `svi_surface_snapshot`
 - `svi_surface_patch`
@@ -102,7 +156,7 @@ The UI expects the API to stream JSON websocket messages. Supported message fami
 - `surface_fit_status`
 - `svi_fly_patch`
 
-The preferred surface format is schema version `1`, with per-expiry smiles, `x_axis`, `var`, `vol`, risk-reversal nodes, fly nodes, and tenor rows.
+The preferred surface format is schema version `1`, with per-expiry options smiles, `x_axis`, `var`, `vol`, implied volatility points, risk reversal nodes, fly nodes, and tenor rows.
 
 ## Requirements
 
@@ -133,16 +187,17 @@ npm run dev
 By default the UI connects to:
 
 ```text
-ws://localhost:8765
+ws://localhost:8765 on localhost
+wss://api.derivasys.com on HTTPS deployments
 ```
 
 Point it at another API:
 
 ```bash
-VITE_SVI_WS_URL=ws://your-api-host:8765 npm run dev
+VITE_SVI_WS_URL=api.derivasys.com npm run dev
 ```
 
-If the UI is served over HTTPS, use `wss://...`; browsers will block insecure websocket connections from HTTPS pages.
+`VITE_SVI_WS_URL` accepts `ws://...`, `wss://...`, `http(s)://...`, same-origin paths such as `/ws`, or a bare host such as `api.derivasys.com`. Bare hosts automatically use `ws://` on HTTP pages and `wss://` on HTTPS pages.
 
 ## Build And Preview
 
@@ -195,7 +250,7 @@ SVI_API_IMAGE=your-registry/your-api:tag docker compose up --build
 Build the frontend against a direct websocket URL:
 
 ```bash
-VITE_SVI_WS_URL=ws://your-api-host:8765 docker compose up --build frontend
+VITE_SVI_WS_URL=api.derivasys.com docker compose up --build frontend
 ```
 
 ## Static Deployment
@@ -203,7 +258,7 @@ VITE_SVI_WS_URL=ws://your-api-host:8765 docker compose up --build frontend
 For S3, CloudFront, nginx, or any static host:
 
 ```bash
-VITE_SVI_WS_URL=wss://your-api.example.com/ws npm run build
+VITE_SVI_WS_URL=api.derivasys.com npm run build
 ```
 
 Upload the contents of `dist/`.
@@ -213,8 +268,9 @@ Static hosting only serves the UI. The pricing API must still be reachable from 
 For an S3-hosted deployment:
 
 - Serve the bucket through CloudFront or another HTTPS-capable CDN.
-- Build the UI with a secure websocket URL, for example `VITE_SVI_WS_URL=wss://api.your-domain/ws`.
-- If the API is currently only exposed as plain `ws://...`, put TLS in front of it first. A page loaded over `https://...` cannot connect to an insecure websocket endpoint.
+- Build the UI with `VITE_SVI_WS_URL=api.derivasys.com`, or omit it and let non-local deployments default to `api.derivasys.com`.
+- If the page is loaded over HTTPS, the app will use `wss://api.derivasys.com`. If it is loaded over HTTP, it will use `ws://api.derivasys.com`.
+- If the API is only exposed as plain `ws://...`, put TLS in front of it first before serving the frontend over HTTPS. A page loaded over `https://...` cannot connect to an insecure websocket endpoint.
 - Common API TLS options are an AWS Application Load Balancer with an ACM certificate, CloudFront in front of an HTTP websocket origin, or nginx/Caddy on the EC2 instance with a Let's Encrypt certificate.
 
 ## Export Into Another Repo

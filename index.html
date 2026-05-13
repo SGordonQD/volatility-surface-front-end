@@ -4,10 +4,253 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/derivasys.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vol Surface</title>
+    <title>Crypto Options Volatility Surface Dashboard | DerivaSys</title>
+    <meta
+      name="description"
+      content="Real-time BTC, ETH, and altcoin crypto options volatility surface dashboard with SVI smiles, Deribit/OKX bid-ask IV, risk reversals, fly nodes, tenor views, and fit diagnostics."
+    />
+    <meta
+      name="keywords"
+      content="BTC options, ETH options, altcoin options, crypto options, volatility surface, implied volatility, SVI, Deribit, OKX, Bitcoin options, Ethereum options"
+    />
+    <meta
+      name="robots"
+      content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1"
+    />
+    <meta name="theme-color" content="#0b1322" />
+    <meta name="application-name" content="DerivaSys Volatility Surface" />
+    <link rel="canonical" href="https://dashboard.derivasys.com/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="DerivaSys" />
+    <meta
+      property="og:title"
+      content="Crypto Options Volatility Surface Dashboard | DerivaSys"
+    />
+    <meta
+      property="og:description"
+      content="Monitor live BTC, ETH, and altcoin crypto options SVI volatility surfaces, option smiles, venue bid/ask/trade IV, tenor slices, and fit diagnostics in one dashboard."
+    />
+    <meta property="og:url" content="https://dashboard.derivasys.com/" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta property="og:image" content="https://dashboard.derivasys.com/og/derivasys-surface-card.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="DerivaSys volatility surface dashboard preview" />
+    <meta name="twitter:image" content="https://dashboard.derivasys.com/og/derivasys-surface-card.png" />
+    <meta name="twitter:image:alt" content="DerivaSys volatility surface dashboard preview" />
+    <meta
+      name="twitter:title"
+      content="Crypto Options Volatility Surface Dashboard | DerivaSys"
+    />
+    <meta
+      name="twitter:description"
+      content="Live BTC, ETH, and altcoin crypto options volatility surface dashboard with SVI smiles, risk nodes, venue overlays, and fit diagnostics."
+    />
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+      }
+
+      body {
+        margin: 0;
+        background: #08111f;
+        color: #e8edf8;
+      }
+
+      .app-shell-fallback {
+        max-width: 72rem;
+        margin: 0 auto;
+        padding: 3rem 1.5rem 4rem;
+      }
+
+      .app-shell-fallback h1 {
+        margin: 0 0 1rem;
+        font-size: clamp(2rem, 4vw, 3.5rem);
+        line-height: 1.05;
+        letter-spacing: -0.04em;
+      }
+
+      .app-shell-fallback p {
+        max-width: 54rem;
+        margin: 0 0 1rem;
+        color: #b6c2dc;
+        font-size: 1.05rem;
+        line-height: 1.7;
+      }
+
+      .app-shell-fallback ul {
+        margin: 1.5rem 0 0;
+        padding-left: 1.2rem;
+        color: #d8e1f4;
+        line-height: 1.8;
+      }
+
+      .app-shell-fallback nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-top: 1.5rem;
+      }
+
+      .app-shell-fallback nav a {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 2.5rem;
+        padding: 0.6rem 0.95rem;
+        border: 1px solid rgba(103, 134, 194, 0.28);
+        border-radius: 999px;
+        background: rgba(11, 22, 39, 0.72);
+        color: #e8edf8;
+        text-decoration: none;
+        font-size: 0.92rem;
+      }
+    </style>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": ["SoftwareApplication", "WebApplication"],
+        "name": "DerivaSys Crypto Options Volatility Surface",
+        "applicationCategory": "FinanceApplication",
+        "operatingSystem": "Web",
+        "url": "https://dashboard.derivasys.com/",
+        "description": "Live crypto options volatility surface dashboard with SVI smiles, bid/ask/trade IV, risk reversals, fly nodes, tenor views, and fit diagnostics.",
+        "keywords": [
+          "BTC options",
+          "ETH options",
+          "altcoin options",
+          "crypto options volatility surface",
+          "Bitcoin implied volatility",
+          "Ethereum implied volatility",
+          "SVI volatility surface"
+        ],
+        "featureList": [
+          "Crypto options SVI variance and volatility surface monitoring",
+          "Deribit and OKX bid, ask, and last-trade implied volatility overlays",
+          "Risk-reversal and fly node analytics",
+          "Tenor interpolation and term-structure views",
+          "Fit diagnostics and calibration monitoring"
+        ],
+        "image": [
+          "https://dashboard.derivasys.com/og/derivasys-surface-card.png"
+        ],
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        "publisher": {
+          "@type": "Organization",
+          "name": "DerivaSys",
+          "url": "https://dashboard.derivasys.com/",
+          "sameAs": [
+            "https://medium.com/@gdnaes/building-a-real-time-crypto-volatility-surface-system-2435b6be2f93",
+            "https://dev.to/gdnaes/building-a-real-time-crypto-volatility-surface-system-3nbf",
+            "https://github.com/SGordonQD/volatility-surface-front-end"
+          ],
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://dashboard.derivasys.com/derivasys.svg"
+          }
+        }
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "DerivaSys",
+        "url": "https://dashboard.derivasys.com/",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://dashboard.derivasys.com/derivasys.svg"
+        },
+        "sameAs": [
+          "https://medium.com/@gdnaes/building-a-real-time-crypto-volatility-surface-system-2435b6be2f93",
+          "https://dev.to/gdnaes/building-a-real-time-crypto-volatility-surface-system-3nbf",
+          "https://github.com/SGordonQD/volatility-surface-front-end"
+        ]
+      }
+    </script>
+    <!-- Google tag (gtag.js) -->
+    <script
+      async
+      src="https://www.googletagmanager.com/gtag/js?id=G-W5S4S464RQ"
+    ></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag("js", new Date());
+
+      gtag("config", "G-W5S4S464RQ");
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <main class="app-shell-fallback">
+        <h1>Crypto Options Volatility Surface Dashboard</h1>
+        <p>
+          DerivaSys is a live crypto options analytics dashboard for monitoring
+          BTC, ETH, and altcoin SVI volatility surfaces, quoted smiles, venue
+          bid/ask/trade IV, risk reversals, fly nodes, tenor slices, and fit
+          diagnostics.
+        </p>
+        <p>
+          The application streams real-time market and calibration updates from
+          the pricing API and turns them into trader-facing surface, smile, and
+          diagnostics views for fast monitoring across expiries and venues.
+        </p>
+        <ul>
+          <li>Live SVI variance and volatility surface views</li>
+          <li>Smile charts with bid, ask, and last-trade implied vol overlays</li>
+          <li>Risk-reversal, fly, tenor, and quote-through-fit analytics</li>
+          <li>Operational fit diagnostics for calibration health</li>
+        </ul>
+        <nav aria-label="Research pages">
+          <a href="/crypto-options-volatility-surface/">Crypto Options Surface</a>
+          <a href="/explainer/">Project Explainer</a>
+          <a href="/what-is-svi/">What Is SVI?</a>
+          <a href="/methodology/">Methodology</a>
+          <a href="/real-time-volatility-surface/">Real-Time Volatility Surface</a>
+          <a href="/arbitrage-constraints/">Arbitrage Constraints</a>
+          <a href="/aws-architecture/">AWS Architecture</a>
+          <a href="/kafka-kubernetes-roadmap/">Kafka/K8s Roadmap</a>
+          <a
+            href="https://medium.com/@gdnaes/building-a-real-time-crypto-volatility-surface-system-2435b6be2f93"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Medium Write-up
+          </a>
+          <a
+            href="https://dev.to/gdnaes/building-a-real-time-crypto-volatility-surface-system-3nbf"
+            target="_blank"
+            rel="noreferrer"
+          >
+            DEV Write-up
+          </a>
+          <a
+            href="https://github.com/SGordonQD/volatility-surface-front-end"
+            target="_blank"
+            rel="noreferrer"
+          >
+            GitHub Repo
+          </a>
+          <a href="mailto:gdnaes@gmail.com?subject=DerivaSys%20volatility%20surface">
+            Contact Sean
+          </a>
+        </nav>
+      </main>
+    </div>
+    <noscript>
+      JavaScript is required to load the live DerivaSys dashboard and connect
+      to the streaming market-data API.
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
