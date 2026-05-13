@@ -11,6 +11,7 @@ import {
   safeNumber,
 } from "../lib/svi-charting";
 import type {
+  AtmMessage,
   FlyByExpiry,
   IncomingMessage,
   QuotesByExpiry,
@@ -113,6 +114,14 @@ function isSmileLevelsRemoveMessage(message: IncomingMessage): message is SmileL
 
 function isSmilePointUpdateMessage(message: IncomingMessage): message is SmilePointUpdateMessage {
   return message.type === "smile_point_update";
+}
+
+function isAtmMessage(message: IncomingMessage): message is AtmMessage {
+  const record = asRecord(message);
+  if (!record) return false;
+  const type = typeof record.type === "string" ? record.type : undefined;
+  const eventType = typeof record.event_type === "string" ? record.event_type : undefined;
+  return type === "atm" || eventType === "atm";
 }
 
 function isSviFlyPatchMessage(message: IncomingMessage): message is SviFlyPatchMessage {
@@ -407,6 +416,66 @@ function buildExpiryKeyCandidates(expiry: number) {
   return [...candidates];
 }
 
+function applyAtmUpdate(current: QuotesByExpiry, message: AtmMessage) {
+  const expiryCandidates = buildExpiryKeyCandidates(message.expiry);
+  const existingKey = expiryCandidates.find((candidate) => current[candidate] != null);
+  const expiryKey = existingKey ?? String(message.expiry);
+  const existing = current[expiryKey];
+  const eventTs =
+    safeNumber(message.ts) ??
+    safeNumber(message.received_ms) ??
+    Date.now();
+  if (existing && eventTs < (existing.ts ?? Number.NEGATIVE_INFINITY)) {
+    return current;
+  }
+
+  const nextState = {
+    ts: Math.max(existing?.ts ?? Number.NEGATIVE_INFINITY, eventTs),
+    atm:
+      safeNumber(message.atm) ??
+      safeNumber(message.underlying_price) ??
+      existing?.atm ??
+      null,
+    atmVersion: existing?.atmVersion ?? null,
+    sourcePrice: safeNumber(message.source_price) ?? existing?.sourcePrice ?? null,
+    priceSource:
+      (typeof message.price_source === "string" ? message.price_source : undefined) ??
+      existing?.priceSource,
+    interpolated:
+      typeof message.interpolated === "boolean" ? message.interpolated : existing?.interpolated,
+    sourceExchange:
+      (typeof message.source_exchange === "string" ? message.source_exchange : undefined) ??
+      existing?.sourceExchange,
+    sourceInstrument:
+      (typeof message.source_instrument === "string" ? message.source_instrument : undefined) ??
+      existing?.sourceInstrument,
+    lastTradePrice: existing?.lastTradePrice ?? null,
+    label:
+      (typeof message.label === "string" ? message.label : undefined) ??
+      existing?.label,
+    pointsByStrike: existing?.pointsByStrike ?? {},
+  };
+
+  if (
+    existing &&
+    existing.ts === nextState.ts &&
+    existing.atm === nextState.atm &&
+    existing.sourcePrice === nextState.sourcePrice &&
+    existing.priceSource === nextState.priceSource &&
+    existing.interpolated === nextState.interpolated &&
+    existing.sourceExchange === nextState.sourceExchange &&
+    existing.sourceInstrument === nextState.sourceInstrument &&
+    existing.label === nextState.label
+  ) {
+    return current;
+  }
+
+  return {
+    ...current,
+    [expiryKey]: nextState,
+  };
+}
+
 function removeQuoteStateForSmile(current: QuotesByExpiry, message: SmileLevelsRemoveMessage) {
   const keys = new Set(buildExpiryKeyCandidates(message.expiry));
   const targetLabel = typeof message.label === "string" ? message.label.trim().toUpperCase() : "";
@@ -572,10 +641,11 @@ function applySmileLevelsAddToSnapshot(
       smiles: [],
     } as SviSurfaceSnapshot);
 
-  const existingIdx = base.smiles.findIndex((smile) => smile.expiry === message.expiry);
+  const baseSmiles = base.smiles ?? [];
+  const existingIdx = baseSmiles.findIndex((smile) => smile.expiry === message.expiry);
   const nextSmiles =
     existingIdx >= 0
-      ? base.smiles.map((smile, idx) => {
+      ? baseSmiles.map((smile, idx) => {
           if (idx !== existingIdx) return smile;
           if (!message.label || message.label === smile.label) return smile;
           return {
@@ -583,7 +653,7 @@ function applySmileLevelsAddToSnapshot(
             label: message.label,
           };
         })
-      : [...base.smiles, createPlaceholderSmile(message)];
+      : [...baseSmiles, createPlaceholderSmile(message)];
 
   return normalizeSnapshotOrder({
     ...base,
@@ -600,12 +670,13 @@ function applySmileLevelsRemoveToSnapshot(
   if (!current) return current;
 
   const targetLabel = typeof message.label === "string" ? message.label.trim().toUpperCase() : "";
-  const filtered = current.smiles.filter((smile) => {
+  const currentSmiles = current.smiles ?? [];
+  const filtered = currentSmiles.filter((smile) => {
     if (smile.expiry === message.expiry) return false;
     if (!targetLabel) return true;
     return (smile.label ?? "").trim().toUpperCase() !== targetLabel;
   });
-  if (filtered.length === current.smiles.length) {
+  if (filtered.length === currentSmiles.length) {
     return current;
   }
 
@@ -944,7 +1015,7 @@ function pruneFlyStateBySnapshot(current: FlyByExpiry, snapshot: SviSurfaceSnaps
   if (!snapshot) return current;
 
   const activeExpiries = new Set<string>();
-  for (const smile of snapshot.smiles) {
+  for (const smile of snapshot.smiles ?? []) {
     for (const key of buildExpiryKeyCandidates(smile.expiry)) {
       activeExpiries.add(key);
     }
@@ -1147,6 +1218,7 @@ export function useSviFeed(): FeedState {
     let latestStatus: string | null = null;
     let latestSmileStatusText: string | null = null;
     const orderedSmileOperations: Array<
+      | { kind: "atm_update"; message: AtmMessage }
       | { kind: "surface_snapshot"; message: SviSurfaceSnapshot }
       | { kind: "surface_patch"; message: SviSurfacePatch }
       | { kind: "tenor_snapshot"; message: SviTenorSnapshotMessage }
@@ -1191,6 +1263,14 @@ export function useSviFeed(): FeedState {
       if (isSurfacePatch(message)) {
         orderedSmileOperations.push({
           kind: "surface_patch",
+          message,
+        });
+        continue;
+      }
+
+      if (isAtmMessage(message)) {
+        orderedSmileOperations.push({
+          kind: "atm_update",
           message,
         });
         continue;
@@ -1313,6 +1393,14 @@ export function useSviFeed(): FeedState {
 
       for (const operation of orderedSmileOperations) {
         switch (operation.kind) {
+          case "atm_update": {
+            const updated = applyAtmUpdate(nextQuotes, operation.message);
+            if (updated !== nextQuotes) {
+              nextQuotes = updated;
+              quotesChanged = true;
+            }
+            break;
+          }
           case "surface_snapshot": {
             nextSnapshot = normalizeSnapshotOrder(operation.message);
             snapshotChanged = true;
@@ -1388,7 +1476,7 @@ export function useSviFeed(): FeedState {
               flyChanged = true;
             }
 
-            latestSmileStatusText = `Tracking ${nextSnapshot?.smiles.length ?? 0} smiles`;
+            latestSmileStatusText = `Tracking ${nextSnapshot?.smiles?.length ?? 0} smiles`;
             break;
           }
           case "smile_levels_snapshot":
@@ -1510,7 +1598,38 @@ export function useSviFeed(): FeedState {
       wsRef.current = null;
     }
 
-    const ws = new WebSocket(FALLBACK_WS_URL);
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(FALLBACK_WS_URL);
+    } catch (error) {
+      setConnected(false);
+
+      if (!shouldReconnectRef.current || manuallyClosingRef.current) {
+        setStatusText("WebSocket unavailable");
+        return;
+      }
+
+      const currentAttempt = reconnectAttemptRef.current;
+      const delay = getReconnectDelay(currentAttempt);
+      setReconnectAttempt(currentAttempt + 1);
+      setStatusText(`WebSocket unavailable - retrying in ${Math.round(delay / 1000)}s`);
+
+      if (reconnectTimeoutRef.current === null) {
+        reconnectTimeoutRef.current = window.setTimeout(() => {
+          reconnectTimeoutRef.current = null;
+          reconnectAttemptRef.current = currentAttempt + 1;
+          connectRef.current();
+        }, delay);
+      }
+
+      if (debugEnabledRef.current) {
+        console.warn("[svi-debug] failed to construct websocket", {
+          error,
+          url: FALLBACK_WS_URL,
+        });
+      }
+      return;
+    }
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -1637,7 +1756,7 @@ export function useSviFeed(): FeedState {
         lastFlushMs: Number(lastFlushDurationMsRef.current.toFixed(2)),
         trackedExpiries: quoteStates.length,
         trackedStrikes: strikeCount,
-        snapshotSmiles: latestSnapshotRef.current?.smiles.length ?? 0,
+        snapshotSmiles: latestSnapshotRef.current?.smiles?.length ?? 0,
         trackedFlyExpiries: Object.keys(latestFlyRef.current).length,
         trackedTenors: Object.keys(latestTenorRef.current).length,
         heapUsedMb: (() => {

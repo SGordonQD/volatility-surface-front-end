@@ -33,7 +33,7 @@ flowchart LR
 
 ## Browser Data Model
 
-The UI treats incoming websocket messages as either full snapshots or incremental patches. It merges updates by currency, expiry, tenor, strike, and exchange so high-frequency implied volatility changes do not require replacing the entire SVI volatility surface.
+The UI treats incoming websocket messages as either full snapshots or incremental patches. It merges updates by expiry, tenor, strike, and exchange within the active feed so high-frequency implied volatility changes do not require replacing the entire SVI volatility surface.
 
 Primary data families:
 
@@ -43,9 +43,9 @@ Primary data families:
 - `surface_fit_status` for calibration timing, current fit health, last fit health, and operational diagnostics.
 - `svi_fly_patch` for fly and risk reversal analytics.
 
-## Currency Routing
+## Active Feed Contract
 
-Currency support is feed-driven. The API can publish `available_ccys`, and the UI sends a `select_currency` websocket message when the user switches between BTC, ETH, SOL, XRP, BNB, DOGE, ADA, AVAX, LTC, or any other supported crypto options underlying.
+The browser consumes the active websocket feed published by the API. The old API contract does not require a client-side currency selection message; it can label the active BTC, ETH, or altcoin surface with `ccy` when that field is present.
 
 ## Deployment Shape
 

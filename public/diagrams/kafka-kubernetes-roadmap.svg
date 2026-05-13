@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 560" role="img" aria-labelledby="title desc">
+  <title id="title">Kafka and Kubernetes roadmap for DerivaSys</title>
+  <desc id="desc">A roadmap diagram showing exchange ingestion pods, Kafka topics, calibration and analytics workers, websocket gateways, and the DerivaSys dashboard.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#7f9fca" />
+    </marker>
+    <style>
+      .bg { fill: #07101a; }
+      .zone { fill: #09131f; stroke: #26364a; stroke-width: 1.5; }
+      .box { fill: #0f1a2a; stroke: #33465f; stroke-width: 1.5; rx: 10; }
+      .box-kafka { fill: #151926; stroke: #8b6f2f; stroke-width: 1.5; rx: 10; }
+      .box-k8s { fill: #0d1d2b; stroke: #356287; stroke-width: 1.5; rx: 10; }
+      .box-good { fill: #0e1d19; stroke: #37694c; stroke-width: 1.5; rx: 10; }
+      .label { fill: #e6edf7; font: 700 17px Inter, Arial, sans-serif; letter-spacing: .03em; }
+      .small { fill: #a7b4c6; font: 500 13px Inter, Arial, sans-serif; }
+      .tiny { fill: #7f8fa5; font: 600 11px Inter, Arial, sans-serif; letter-spacing: .08em; text-transform: uppercase; }
+      .accent { fill: #d8903c; }
+      .line { stroke: #7f9fca; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+      .line-soft { stroke: #57718f; stroke-width: 1.5; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1120" height="560" />
+  <rect class="zone" x="24" y="26" width="1072" height="508" rx="18" />
+  <text class="tiny accent" x="48" y="58">Next evolution</text>
+  <text class="small" x="48" y="82">Kafka provides replayable market data; Kubernetes gives each service an independent runtime boundary.</text>
+
+  <rect class="box" x="52" y="194" width="146" height="88" />
+  <text class="label" x="82" y="226">Exchanges</text>
+  <text class="small" x="78" y="250">books, trades,</text>
+  <text class="small" x="78" y="268">futures, indexes</text>
+
+  <rect class="zone" x="252" y="112" width="236" height="320" rx="14" />
+  <text class="tiny accent" x="276" y="142">Kubernetes ingestion</text>
+  <rect class="box-k8s" x="280" y="166" width="180" height="54" />
+  <text class="label" x="310" y="199">Deribit pod</text>
+  <rect class="box-k8s" x="280" y="240" width="180" height="54" />
+  <text class="label" x="328" y="273">OKX pod</text>
+  <rect class="box-k8s" x="280" y="314" width="180" height="54" />
+  <text class="label" x="308" y="347">Binance pod</text>
+
+  <rect class="zone" x="540" y="96" width="220" height="352" rx="14" />
+  <text class="tiny accent" x="568" y="126">Kafka topics</text>
+  <rect class="box-kafka" x="570" y="154" width="160" height="42" />
+  <text class="label" x="606" y="181">raw quotes</text>
+  <rect class="box-kafka" x="570" y="214" width="160" height="42" />
+  <text class="label" x="594" y="241">normalized IV</text>
+  <rect class="box-kafka" x="570" y="274" width="160" height="42" />
+  <text class="label" x="606" y="301">forwards</text>
+  <rect class="box-kafka" x="570" y="334" width="160" height="42" />
+  <text class="label" x="600" y="361">SVI fits</text>
+  <rect class="box-kafka" x="570" y="394" width="160" height="42" />
+  <text class="label" x="594" y="421">patch stream</text>
+
+  <rect class="zone" x="810" y="112" width="242" height="320" rx="14" />
+  <text class="tiny accent" x="836" y="142">Kubernetes analytics</text>
+  <rect class="box" x="838" y="166" width="188" height="54" />
+  <text class="label" x="870" y="199">Normalizer</text>
+  <rect class="box" x="838" y="240" width="188" height="54" />
+  <text class="label" x="858" y="273">Calibration workers</text>
+  <rect class="box" x="838" y="314" width="188" height="54" />
+  <text class="label" x="860" y="347">Risk diagnostics</text>
+
+  <rect class="box-good" x="810" y="468" width="242" height="52" />
+  <text class="label" x="850" y="501">WebSocket gateways</text>
+
+  <rect class="box" x="52" y="420" width="146" height="72" />
+  <text class="label" x="86" y="452">Dashboard</text>
+  <text class="small" x="82" y="474">snapshots, patches</text>
+
+  <path class="line" d="M198 238 H252" />
+  <path class="line" d="M460 193 H570" />
+  <path class="line" d="M460 267 H570" />
+  <path class="line" d="M460 341 H570" />
+  <path class="line-soft" d="M730 175 H838" />
+  <path class="line-soft" d="M730 235 H838" />
+  <path class="line-soft" d="M730 295 H838" />
+  <path class="line-soft" d="M730 415 C776 415 772 494 810 494" />
+  <path class="line" d="M810 494 C560 536 320 520 198 456" />
+  <path class="line-soft" d="M932 220 V240" />
+  <path class="line-soft" d="M932 294 V314" />
+
+  <text class="tiny" x="214" y="226">normalized events</text>
+  <text class="tiny" x="480" y="182">publish</text>
+  <text class="tiny" x="758" y="162">consume</text>
+  <text class="tiny" x="790" y="452">websocket-ready patches</text>
+  <text class="tiny" x="226" y="516">UI contract stays compact</text>
+</svg>

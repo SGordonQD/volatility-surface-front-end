@@ -255,6 +255,25 @@ export type SmileLevelsAddMessage = {
   source_exchange?: string;
 };
 
+export type AtmMessage = {
+  type?: "atm";
+  event_type?: "atm";
+  ts?: number;
+  received_ms?: number;
+  ccy?: string;
+  currency?: string;
+  expiry: number;
+  exchange?: string;
+  label?: string;
+  atm?: number | null;
+  underlying_price?: number | null;
+  source_price?: number | null;
+  source_exchange?: string;
+  source_instrument?: string;
+  price_source?: string;
+  interpolated?: boolean;
+};
+
 export type RiskReversalUpdateMessage = {
   type?: string;
   ts?: number;
@@ -328,6 +347,7 @@ export type SmilePointUpdateMessage = {
 export type IncomingMessage =
   | SviSurfaceSnapshot
   | SviSurfacePatch
+  | AtmMessage
   | SmileLevelsAddMessage
   | SmileLevelsRemoveMessage
   | RiskReversalUpdateMessage
@@ -348,6 +368,11 @@ export type QuotesByExpiry = Record<
     ts: number;
     atm?: number | null;
     atmVersion?: number | null;
+    sourcePrice?: number | null;
+    priceSource?: string;
+    interpolated?: boolean;
+    sourceExchange?: string;
+    sourceInstrument?: string;
     lastTradePrice?: number | null;
     label?: string;
     pointsByStrike: Record<string, SmilePoint>;

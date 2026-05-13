@@ -16,7 +16,7 @@ Description: Real-time crypto options volatility surface analytics platform with
 
 Topics: `svi`, `volatility-surface`, `crypto-options`, `deribit`, `implied-volatility`, `options-analytics`, `quant-finance`, `websockets`, `BTC`
 
-Currencies: `BTC`, `ETH`, `SOL`, `XRP`, `BNB`, `DOGE`, `ADA`, `AVAX`, `LTC`, and any other crypto options underlyings published by the websocket API through `available_ccys`.
+Underlyings: designed for `BTC`, `ETH`, `SOL`, `XRP`, `BNB`, `DOGE`, `ADA`, `AVAX`, `LTC`, and other altcoin crypto options surfaces when the websocket API publishes them as the active feed.
 
 Tech stack: React, TypeScript, Vite, Canvas charts, Recharts, Framer Motion, Lucide React, CSS, WebSocket APIs, nginx, Docker, S3/CloudFront-compatible static deployment.
 
@@ -38,21 +38,11 @@ Recommended screenshots before sharing publicly:
 
 ## Screenshots
 
-Store production screenshots in `docs/assets/screenshots/` as PNG or WebP files. Use descriptive filenames and alt text so search engines and readers understand the crypto options workflow being shown.
+Screenshots are stored in `public/screenshots/` so they work in the deployed information pages and in this README.
 
-Recommended screenshots:
+![Risk reversal, node-vol, fly, and fly-node analytics](public/screenshots/risk-reversal-fly-panels.png)
 
-- `surface-monitor.png`: SVI volatility surface dashboard with live implied volatility term structure.
-- `options-smile-matrix.png`: per-expiry options smile charts with Deribit, Binance, OKX, or other exchange overlays.
-- `risk-reversal-grid.png`: risk reversal, fly, and quote-through-fit analytics for BTC or another active currency.
-
-Embed screenshots in this README after the files exist:
-
-```md
-![Crypto options SVI volatility surface dashboard](docs/assets/screenshots/surface-monitor.png)
-![Options smile implied volatility matrix](docs/assets/screenshots/options-smile-matrix.png)
-![Risk reversal analytics grid](docs/assets/screenshots/risk-reversal-grid.png)
-```
+![SVI-through matrix showing bid and ask levels through the fitted surface](public/screenshots/through-fit-matrix.png)
 
 ## What It Does
 
@@ -65,6 +55,28 @@ Embed screenshots in this README after the files exist:
 - Provides runtime diagnostics for websocket queue depth, dropped messages, render timing, and crash logs.
 - Supports first-visit data-quality/GDPR disclosure for externally shared deployments.
 - Deploys as a static Vite build, suitable for S3/CloudFront or another HTTPS-capable static host.
+
+## MVP And AWS Scaling Path
+
+The current MVP keeps the browser layer deliberately simple. This repository builds a static React/Vite dashboard, connects to one websocket API, receives the current active BTC, ETH, or altcoin options surface, and merges snapshots and patches in the browser. The pricing engine remains responsible for exchange ingestion, quote normalization, SVI calibration, risk reversal/fly construction, and fit diagnostics.
+
+In MVP form, the deployment shape is:
+
+- `S3 + CloudFront`: serve the static dashboard over HTTPS.
+- `Websocket API`: publish compact surface snapshots and patches over WSS.
+- `Pricing/calibration services`: run behind the API boundary, away from the browser.
+- `CloudWatch/logging`: track feed freshness, fit latency, websocket reconnects, queue depth, and dropped messages.
+
+As usage and market-data volume grow, the backend can scale without changing the UI contract. ECS is the pragmatic first AWS step for separate ingestion, calibration, and websocket services. EKS becomes more useful when the system needs independently scaling stream processors, calibration workers, websocket gateways, health checks, and controlled rollouts.
+
+The next evolution is Kafka plus Kubernetes: exchange connectors publish replayable market-data events into Kafka topics, calibration workers consume normalized quote streams, and websocket gateways fan out compact dashboard-ready patches. The browser still receives the same snapshots and patches; Kafka and K8s improve resilience, replay, and operational scaling behind that boundary.
+
+![AWS architecture for the DerivaSys volatility surface dashboard](public/diagrams/aws-architecture.svg)
+
+More detail:
+
+- [AWS Architecture](aws-architecture/index.html): how the static frontend, websocket API, runtime services, secrets, and observability fit together.
+- [Kafka/Kubernetes Roadmap](kafka-kubernetes-roadmap/index.html): how the backend can evolve toward replayable market-data streams and independently scalable workers.
 
 ## Architecture
 
@@ -175,16 +187,17 @@ npm run dev
 By default the UI connects to:
 
 ```text
-ws://localhost:8765
+ws://localhost:8765 on localhost
+wss://api.derivasys.com on HTTPS deployments
 ```
 
 Point it at another API:
 
 ```bash
-VITE_SVI_WS_URL=ws://your-api-host:8765 npm run dev
+VITE_SVI_WS_URL=api.derivasys.com npm run dev
 ```
 
-If the UI is served over HTTPS, use `wss://...`; browsers will block insecure websocket connections from HTTPS pages.
+`VITE_SVI_WS_URL` accepts `ws://...`, `wss://...`, `http(s)://...`, same-origin paths such as `/ws`, or a bare host such as `api.derivasys.com`. Bare hosts automatically use `ws://` on HTTP pages and `wss://` on HTTPS pages.
 
 ## Build And Preview
 
@@ -237,7 +250,7 @@ SVI_API_IMAGE=your-registry/your-api:tag docker compose up --build
 Build the frontend against a direct websocket URL:
 
 ```bash
-VITE_SVI_WS_URL=ws://your-api-host:8765 docker compose up --build frontend
+VITE_SVI_WS_URL=api.derivasys.com docker compose up --build frontend
 ```
 
 ## Static Deployment
@@ -245,7 +258,7 @@ VITE_SVI_WS_URL=ws://your-api-host:8765 docker compose up --build frontend
 For S3, CloudFront, nginx, or any static host:
 
 ```bash
-VITE_SVI_WS_URL=wss://your-api.example.com/ws npm run build
+VITE_SVI_WS_URL=api.derivasys.com npm run build
 ```
 
 Upload the contents of `dist/`.
@@ -255,8 +268,9 @@ Static hosting only serves the UI. The pricing API must still be reachable from 
 For an S3-hosted deployment:
 
 - Serve the bucket through CloudFront or another HTTPS-capable CDN.
-- Build the UI with a secure websocket URL, for example `VITE_SVI_WS_URL=wss://api.your-domain/ws`.
-- If the API is currently only exposed as plain `ws://...`, put TLS in front of it first. A page loaded over `https://...` cannot connect to an insecure websocket endpoint.
+- Build the UI with `VITE_SVI_WS_URL=api.derivasys.com`, or omit it and let non-local deployments default to `api.derivasys.com`.
+- If the page is loaded over HTTPS, the app will use `wss://api.derivasys.com`. If it is loaded over HTTP, it will use `ws://api.derivasys.com`.
+- If the API is only exposed as plain `ws://...`, put TLS in front of it first before serving the frontend over HTTPS. A page loaded over `https://...` cannot connect to an insecure websocket endpoint.
 - Common API TLS options are an AWS Application Load Balancer with an ACM certificate, CloudFront in front of an HTTP websocket origin, or nginx/Caddy on the EC2 instance with a Let's Encrypt certificate.
 
 ## Export Into Another Repo

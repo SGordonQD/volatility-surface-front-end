@@ -8,10 +8,10 @@ The API should prefer snapshots for initial state and patches for ongoing update
 
 Recommended message strategy:
 
-- Send one `svi_surface_snapshot` per currency after connection or currency switch.
+- Send one `svi_surface_snapshot` for the active feed after connection.
 - Send `svi_surface_patch` updates when fitted SVI volatility surface parameters, fit status, or tenor rows change.
 - Send `smile_levels_patch`, `smile_levels_add`, and `smile_levels_remove` for incremental options smile and implied volatility quote changes.
-- Include currency fields such as `ccy` or `currency` so BTC, ETH, SOL, and other underlyings can be routed independently.
+- Include an optional `ccy` field so the UI can label the active BTC, ETH, or altcoin surface.
 - Keep exchange-specific fields for Deribit, Binance, OKX, and other venues so the UI can compare multi-exchange implied volatility quotes without duplicating the whole options smile.
 
 ## Browser Backpressure
@@ -23,7 +23,7 @@ Practical scaling rules:
 - Batch fast exchange quote updates into compact websocket patches.
 - Prefer numeric fields over verbose nested structures for high-volume implied volatility ticks.
 - Avoid resending static expiry, tenor, and strike metadata unless it changes.
-- Partition updates by currency so BTC traffic does not delay ETH or SOL state after a currency switch.
+- Partition heavy backend work upstream by underlying/currency so one active surface feed does not block calibration or websocket fanout.
 - Keep rendering state derived from merged snapshots rather than from raw websocket event history.
 
 ## Rendering Strategy

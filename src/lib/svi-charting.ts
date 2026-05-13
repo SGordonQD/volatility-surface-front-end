@@ -20,11 +20,24 @@ import type {
 
 function resolveWsUrlFromEnv(rawValue: unknown): string | null {
   if (typeof rawValue !== "string") return null;
-  const value = rawValue.trim();
+  let value = rawValue.trim();
   if (!value) return null;
 
+  const assignmentMatch = value.match(/^VITE_SVI_WS_URL\s*=\s*(.+)$/i);
+  if (assignmentMatch) {
+    value = assignmentMatch[1].trim();
+  }
+
   if (value.startsWith("ws://") || value.startsWith("wss://")) {
-    return value;
+    try {
+      const url = new URL(value);
+      if (typeof window !== "undefined" && window.location.protocol === "https:" && url.protocol === "ws:") {
+        url.protocol = "wss:";
+      }
+      return url.toString();
+    } catch {
+      return null;
+    }
   }
 
   if (value.startsWith("http://") || value.startsWith("https://")) {
@@ -43,11 +56,26 @@ function resolveWsUrlFromEnv(rawValue: unknown): string | null {
     return `${protocol}//${window.location.host}${value}`;
   }
 
-  return null;
+  try {
+    const protocol =
+      typeof window !== "undefined" && window.location.protocol === "https:"
+        ? "wss:"
+        : "ws:";
+    return new URL(`${protocol}//${value}`).toString();
+  } catch {
+    return null;
+  }
+}
+
+function resolveDefaultWsUrl() {
+  if (typeof window === "undefined") return "ws://localhost:8765";
+  const isLocalHost = ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
+  if (isLocalHost) return "ws://localhost:8765";
+  return resolveWsUrlFromEnv("api.derivasys.com") ?? "ws://localhost:8765";
 }
 
 export const FALLBACK_WS_URL =
-  resolveWsUrlFromEnv(import.meta.env.VITE_SVI_WS_URL) ?? "ws://localhost:8765";
+  resolveWsUrlFromEnv(import.meta.env.VITE_SVI_WS_URL) ?? resolveDefaultWsUrl();
 export const RECONNECT_DELAYS_MS = [2000, 4000, 8000, 15000];
 export const MAX_BID_POINTS_PER_SMILE = 320;
 export const MAX_ASK_POINTS_PER_SMILE = 320;
@@ -63,6 +91,12 @@ const SURFACE_GRID_FALLBACK_MAX_X = 2;
 const SURFACE_GRID_FALLBACK_STEP = 0.05;
 export const FITTED_CURVE_COLOR = "#ff9f2a";
 const TRADE_FLASH_DURATION_MS = 10_000;
+
+function normalizeExpiryToMs(expiry: number | null | undefined) {
+  const normalized = safeNumber(expiry);
+  if (normalized == null || !Number.isFinite(normalized)) return null;
+  return Math.abs(normalized) < 1e11 ? Math.round(normalized * 1000) : Math.round(normalized);
+}
 
 export type ThroughMatrixSide = "neutral" | "bid" | "ask";
 
@@ -380,6 +414,28 @@ function readNumericAliases(source: unknown, aliases: readonly string[]) {
   return null;
 }
 
+function inferLogMoneynessFromStrike(strike: unknown, atm: unknown) {
+  const strikeValue = safeNumber(strike);
+  const atmValue = safeNumber(atm);
+  if (
+    strikeValue == null ||
+    atmValue == null ||
+    !Number.isFinite(strikeValue) ||
+    !Number.isFinite(atmValue) ||
+    strikeValue <= 0 ||
+    atmValue <= 0
+  ) {
+    return null;
+  }
+
+  const logMoneyness = Math.log(strikeValue / atmValue);
+  return Number.isFinite(logMoneyness) ? logMoneyness : null;
+}
+
+function resolvePointLogMoneyness(point: SmilePoint, atm: number | null | undefined) {
+  return inferLogMoneynessFromStrike(point.strike, atm) ?? readNumericAliases(point, LOG_MONEYNESS_KEYS);
+}
+
 function readBookLevelArrayAliases(source: unknown, aliases: readonly string[]) {
   const record = asRecord(source);
   if (!record) return [];
@@ -565,11 +621,11 @@ function mergeSmilePoint(
   existingPoint: SmilePoint | undefined,
   incomingPoint: SmilePoint,
   sourceTs: number | null = null,
-  enableTradeFlash = false
+  enableTradeFlash = false,
+  referenceAtm: number | null = null
 ): SmilePoint {
-  const incomingLogMoneyness = safeNumber(
-    (incomingPoint as { log_moneyness?: unknown }).log_moneyness
-  );
+  const incomingLogMoneyness = readNumericAliases(incomingPoint, LOG_MONEYNESS_KEYS);
+  const inferredLogMoneyness = inferLogMoneynessFromStrike(incomingPoint.strike, referenceAtm);
   const incomingBestBidIv = safeNumber(
     (incomingPoint as { best_bid_iv?: unknown }).best_bid_iv
   );
@@ -640,7 +696,11 @@ function mergeSmilePoint(
   return {
     ...existingPoint,
     ...incomingPoint,
-    log_moneyness: incomingLogMoneyness ?? existingPoint?.log_moneyness ?? incomingPoint.log_moneyness,
+    log_moneyness:
+      inferredLogMoneyness ??
+      incomingLogMoneyness ??
+      existingPoint?.log_moneyness ??
+      incomingPoint.log_moneyness,
     bid_levels: mergeBookLevels(existingPoint?.bid_levels, incomingPoint.bid_levels, incomingBestBidIv),
     ask_levels: mergeBookLevels(existingPoint?.ask_levels, incomingPoint.ask_levels, incomingBestAskIv),
     best_bid_iv: incomingBestBidIv ?? existingPoint?.best_bid_iv,
@@ -670,6 +730,76 @@ function resolveMessageAtm(message: SmileQuoteMessage) {
     safeNumber(message.underlying?.mark_price) ??
     safeNumber(message.underlying?.filtered_mid)
   );
+}
+
+export function resolveAtmForExpiryOrLabel(
+  expiry: number,
+  label: string | undefined,
+  quotesByExpiry: QuotesByExpiry
+) {
+  for (const key of buildExpiryKeyCandidates(expiry)) {
+    const byKey = quotesByExpiry[key];
+    const atm = safeNumber(byKey?.atm);
+    if (atm != null && atm > 0) return atm;
+  }
+
+  const targetLabel = typeof label === "string" ? label.trim().toUpperCase() : "";
+  if (targetLabel) {
+    let bestAtm: number | null = null;
+    let bestTs = Number.NEGATIVE_INFINITY;
+
+    for (const quoteState of Object.values(quotesByExpiry)) {
+      const quoteLabel = typeof quoteState.label === "string" ? quoteState.label.trim().toUpperCase() : "";
+      if (quoteLabel !== targetLabel) continue;
+      const atm = safeNumber(quoteState.atm);
+      if (atm == null || atm <= 0) continue;
+      if ((quoteState.ts ?? 0) > bestTs) {
+        bestTs = quoteState.ts ?? 0;
+        bestAtm = atm;
+      }
+    }
+
+    if (bestAtm != null) return bestAtm;
+  }
+
+  const targetExpiryMs = normalizeExpiryToMs(expiry);
+  if (targetExpiryMs == null) return null;
+
+  const pointsByExpiry = new Map<number, { expiryMs: number; atm: number; ts: number }>();
+  for (const [expiryKey, quoteState] of Object.entries(quotesByExpiry)) {
+    const expiryMs = normalizeExpiryToMs(Number(expiryKey));
+    const atm = safeNumber(quoteState.atm);
+    if (expiryMs == null || atm == null || atm <= 0) continue;
+
+    const existing = pointsByExpiry.get(expiryMs);
+    const ts = quoteState.ts ?? 0;
+    if (!existing || ts >= existing.ts) {
+      pointsByExpiry.set(expiryMs, { expiryMs, atm, ts });
+    }
+  }
+
+  const ordered = [...pointsByExpiry.values()].sort((left, right) => left.expiryMs - right.expiryMs);
+  if (ordered.length < 2) return null;
+
+  let left: (typeof ordered)[number] | null = null;
+  let right: (typeof ordered)[number] | null = null;
+  for (const point of ordered) {
+    if (point.expiryMs < targetExpiryMs) {
+      left = point;
+      continue;
+    }
+    if (point.expiryMs > targetExpiryMs) {
+      right = point;
+      break;
+    }
+  }
+
+  if (!left || !right) return null;
+
+  const dx = right.expiryMs - left.expiryMs;
+  if (!Number.isFinite(dx) || dx === 0) return left.atm;
+  const ratio = (targetExpiryMs - left.expiryMs) / dx;
+  return left.atm + (right.atm - left.atm) * ratio;
 }
 
 function resolveMessageLastTradePrice(message: SmileQuoteMessage) {
@@ -733,14 +863,15 @@ function applyPatchDeletes(
 
 function prunePointsByStrike(
   pointsByStrike: Record<string, SmilePoint>,
-  maxPoints = MAX_STRIKES_PER_SMILE
+  maxPoints = MAX_STRIKES_PER_SMILE,
+  referenceAtm: number | null = null
 ) {
   const entries = Object.entries(pointsByStrike);
   if (entries.length <= maxPoints) return pointsByStrike;
 
   const ranked = entries
     .map(([strikeKey, point]) => {
-      const logMoneyness = safeNumber(point.log_moneyness);
+      const logMoneyness = resolvePointLogMoneyness(point, referenceAtm);
       const priority = logMoneyness == null ? Number.POSITIVE_INFINITY : Math.abs(logMoneyness);
       return { strikeKey, point, priority };
     })
@@ -767,7 +898,8 @@ function applyPatchUpserts(
   pointsByStrike: Record<string, SmilePoint>,
   upserts: BookLevel[] | undefined,
   sourceTs: number | null = null,
-  enableTradeFlash = false
+  enableTradeFlash = false,
+  referenceAtm: number | null = null
 ) {
   if (!Array.isArray(upserts) || upserts.length === 0) return;
 
@@ -777,12 +909,19 @@ function applyPatchUpserts(
 
     const strikeKey = String(strike);
     let existingPoint = pointsByStrike[strikeKey];
+    const inferredLogMoneyness = inferLogMoneynessFromStrike(strike, referenceAtm);
     if (!existingPoint) {
-      const inferredLogMoneyness = readNumericAliases(upsert, LOG_MONEYNESS_KEYS);
-      if (inferredLogMoneyness == null) continue;
+      const upsertLogMoneyness = inferredLogMoneyness ?? readNumericAliases(upsert, LOG_MONEYNESS_KEYS);
+      if (upsertLogMoneyness == null) continue;
 
       existingPoint = {
         strike,
+        log_moneyness: upsertLogMoneyness,
+      };
+      pointsByStrike[strikeKey] = existingPoint;
+    } else if (inferredLogMoneyness != null) {
+      existingPoint = {
+        ...existingPoint,
         log_moneyness: inferredLogMoneyness,
       };
       pointsByStrike[strikeKey] = existingPoint;
@@ -868,13 +1007,14 @@ function applyPatchUpserts(
 }
 
 export function applySmileSnapshot(current: QuotesByExpiry, msg: SmileSnapshotMessage): QuotesByExpiry {
-  const expiryKey = String(msg.expiry);
+  const expiryKey = resolveQuoteExpiryKey(current, msg.expiry);
   const existing = current[expiryKey];
   const nextTs = Math.max(existing?.ts ?? Number.NEGATIVE_INFINITY, msg.ts);
   const nextAtm = resolveMessageAtm(msg);
   const nextAtmVersion = safeNumber(msg.atm_version);
   const nextLastTradePrice = resolveMessageLastTradePrice(msg);
   const existingAtmVersion = existing?.atmVersion ?? null;
+  const referenceAtm = nextAtm ?? existing?.atm ?? null;
 
   // Some feeds emit transient empty snapshots before the next populated quote batch.
   // Keep the last populated smile to avoid the chart flashing down to just the fitted line.
@@ -895,10 +1035,10 @@ export function applySmileSnapshot(current: QuotesByExpiry, msg: SmileSnapshotMe
   for (const point of msg.points ?? []) {
     const strikeKey = String(point.strike);
     const existingPoint = pointsByStrike[strikeKey];
-    pointsByStrike[strikeKey] = mergeSmilePoint(existingPoint, point, msg.ts, false);
+    pointsByStrike[strikeKey] = mergeSmilePoint(existingPoint, point, msg.ts, false, referenceAtm);
   }
 
-  const nextPointsByStrike = prunePointsByStrike(pointsByStrike);
+  const nextPointsByStrike = prunePointsByStrike(pointsByStrike, MAX_STRIKES_PER_SMILE, referenceAtm);
 
   return {
     ...current,
@@ -917,13 +1057,14 @@ export function applySmileLevelsSnapshot(
   current: QuotesByExpiry,
   msg: SmileLevelsSnapshotMessage | SmileLevelsPatchMessage
 ): QuotesByExpiry {
-  const expiryKey = String(msg.expiry);
+  const expiryKey = resolveQuoteExpiryKey(current, msg.expiry);
   const existing = current[expiryKey];
   const nextTs = Math.max(existing?.ts ?? Number.NEGATIVE_INFINITY, msg.ts);
   const nextAtm = resolveMessageAtm(msg);
   const nextAtmVersion = safeNumber(msg.atm_version);
   const nextLastTradePrice = resolveMessageLastTradePrice(msg);
   const existingAtmVersion = existing?.atmVersion ?? null;
+  const referenceAtm = nextAtm ?? existing?.atm ?? null;
 
   const shouldFlashTradeUpdates = msg.type === "smile_levels_patch";
   const pointsByStrike: Record<string, typeof msg.points[number]> = {
@@ -936,18 +1077,20 @@ export function applySmileLevelsSnapshot(
       existingPoint,
       point,
       msg.ts,
-      shouldFlashTradeUpdates
+      shouldFlashTradeUpdates,
+      referenceAtm
     );
   }
   applyPatchUpserts(
     pointsByStrike,
     "upserts" in msg ? msg.upserts : undefined,
     msg.ts,
-    shouldFlashTradeUpdates
+    shouldFlashTradeUpdates,
+    referenceAtm
   );
   applyPatchDeletes(pointsByStrike, "deletes" in msg ? msg.deletes : undefined);
 
-  const nextPointsByStrike = prunePointsByStrike(pointsByStrike);
+  const nextPointsByStrike = prunePointsByStrike(pointsByStrike, MAX_STRIKES_PER_SMILE, referenceAtm);
 
   return {
     ...current,
@@ -966,22 +1109,23 @@ export function applySmilePointUpdate(
   current: QuotesByExpiry,
   msg: SmilePointUpdateMessage
 ): QuotesByExpiry {
-  const expiryKey = String(msg.expiry);
+  const expiryKey = resolveQuoteExpiryKey(current, msg.expiry);
   const existing = current[expiryKey];
   const nextTs = Math.max(existing?.ts ?? Number.NEGATIVE_INFINITY, msg.ts);
   const nextAtm = resolveMessageAtm(msg);
   const nextAtmVersion = safeNumber(msg.atm_version);
   const nextLastTradePrice = resolveMessageLastTradePrice(msg);
   const existingAtmVersion = existing?.atmVersion ?? null;
+  const referenceAtm = nextAtm ?? existing?.atm ?? null;
 
   const nextPointsByStrike = { ...(existing?.pointsByStrike ?? {}) };
   for (const point of msg.points ?? []) {
     const strikeKey = String(point.strike);
     const existingPoint = nextPointsByStrike[strikeKey];
-    nextPointsByStrike[strikeKey] = mergeSmilePoint(existingPoint, point, msg.ts, true);
+    nextPointsByStrike[strikeKey] = mergeSmilePoint(existingPoint, point, msg.ts, true, referenceAtm);
   }
 
-  const prunedPointsByStrike = prunePointsByStrike(nextPointsByStrike);
+  const prunedPointsByStrike = prunePointsByStrike(nextPointsByStrike, MAX_STRIKES_PER_SMILE, referenceAtm);
 
   return {
     ...current,
@@ -1000,11 +1144,21 @@ export function pruneQuotesBySnapshot(
   current: QuotesByExpiry,
   snapshot: SviSurfaceSnapshot
 ): QuotesByExpiry {
-  const allowedExpiries = new Set(snapshot.smiles.map((smile) => String(smile.expiry)));
+  const allowedExpiries = new Set(
+    (snapshot.smiles ?? []).flatMap((smile) => buildExpiryKeyCandidates(smile.expiry))
+  );
+  const allowedLabels = new Set(
+    (snapshot.smiles ?? [])
+      .map((smile) => (typeof smile.label === "string" ? smile.label.trim().toUpperCase() : ""))
+      .filter(Boolean)
+  );
   const next: QuotesByExpiry = {};
 
   for (const [expiryKey, quoteState] of Object.entries(current)) {
-    if (allowedExpiries.has(expiryKey)) {
+    const numericExpiry = safeNumber(expiryKey);
+    const expiryKeys = numericExpiry == null ? [expiryKey] : buildExpiryKeyCandidates(numericExpiry);
+    const quoteLabel = typeof quoteState.label === "string" ? quoteState.label.trim().toUpperCase() : "";
+    if (expiryKeys.some((key) => allowedExpiries.has(key)) || (quoteLabel && allowedLabels.has(quoteLabel))) {
       next[expiryKey] = quoteState;
     }
   }
@@ -1164,6 +1318,14 @@ function buildExpiryKeyCandidates(expiry: number) {
   }
 
   return [...candidates];
+}
+
+function resolveQuoteExpiryKey(current: QuotesByExpiry, expiry: number) {
+  for (const key of buildExpiryKeyCandidates(expiry)) {
+    if (current[key]) return key;
+  }
+
+  return String(expiry);
 }
 
 function resolveQuoteStateForSmile(smile: SviSmile, quotesByExpiry: QuotesByExpiry) {
@@ -1351,9 +1513,11 @@ export function buildSmileThroughMatrix(
   const strikeSet = new Set<number>();
   let maxThrough = 0;
 
-  const rows: SmileThroughRow[] = snapshot.smiles.map((smile) => {
+  const rows: SmileThroughRow[] = (snapshot.smiles ?? []).map((smile) => {
     const quoteState = resolveQuoteStateForSmile(smile, quotesByExpiry);
     const quotePoints = quoteState ? Object.values(quoteState.pointsByStrike) : [];
+    const smileAtm = safeNumber((smile as { atm?: unknown }).atm) ?? null;
+    const resolvedAtm = smileAtm ?? resolveAtmForExpiryOrLabel(smile.expiry, smile.label, quotesByExpiry);
     const curveData = resolveSmileXValues(smile, snapshot)
       .map((x, idx) => ({
         x,
@@ -1366,7 +1530,7 @@ export function buildSmileThroughMatrix(
 
     for (const point of quotePoints) {
       const strike = safeNumber(point.strike);
-      const x = safeNumber(point.log_moneyness);
+      const x = resolvePointLogMoneyness(point, resolvedAtm);
       if (strike == null || x == null) continue;
 
       strikeSet.add(strike);
@@ -1507,7 +1671,7 @@ function buildCurveSeries(
 ): VarianceSeries[] {
   if (!snapshot) return [];
 
-  return snapshot.smiles.map((smile, idx) => {
+  return (snapshot.smiles ?? []).map((smile, idx) => {
     const xValues = resolveSmileXValues(smile, snapshot);
     const curveValues = selector(smile) ?? [];
 
@@ -1552,7 +1716,7 @@ export function buildGTestSeries(snapshot: SviSurfaceSnapshot | null): VarianceS
 export function buildVarianceXDomain(snapshot: SviSurfaceSnapshot | null): [number, number] {
   if (!snapshot) return [-1, 1];
 
-  const xs = snapshot.smiles.flatMap((smile) => resolveSmileXValues(smile, snapshot));
+  const xs = (snapshot.smiles ?? []).flatMap((smile) => resolveSmileXValues(smile, snapshot));
   if (xs.length === 0) return [-1, 1];
 
   return safeDomain(snapDown(Math.min(...xs), 0.05), snapUp(Math.max(...xs), 0.05), [-1, 1]);
@@ -1688,14 +1852,15 @@ export function buildSmileChartRows(
   }
 
   const activeExpiries = new Set<number>();
-  const rows: SmileChartRow[] = snapshot.smiles.map((smile): SmileChartRow => {
+  const rows: SmileChartRow[] = (snapshot.smiles ?? []).map((smile): SmileChartRow => {
     activeExpiries.add(smile.expiry);
     const quoteState = resolveQuoteStateForSmile(smile, quotesByExpiry);
     const quotePoints = quoteState ? Object.values(quoteState.pointsByStrike) : [];
     const smileAtm = safeNumber((smile as { atm?: unknown }).atm) ?? null;
+    const resolvedAtm = smileAtm ?? resolveAtmForExpiryOrLabel(smile.expiry, smile.label, quotesByExpiry);
 
     const rawBidScatter: ScatterRow[] = quotePoints.flatMap((point) => {
-      const x = safeNumber(point.log_moneyness);
+      const x = resolvePointLogMoneyness(point, resolvedAtm);
       if (x == null) return [];
 
       const bidLevels = resolvePointBidLevelsForExchange(point, "deribit")
@@ -1734,7 +1899,7 @@ export function buildSmileChartRows(
     });
 
     const rawAskScatter: ScatterRow[] = quotePoints.flatMap((point) => {
-      const x = safeNumber(point.log_moneyness);
+      const x = resolvePointLogMoneyness(point, resolvedAtm);
       if (x == null) return [];
 
       const askLevels = resolvePointAskLevelsForExchange(point, "deribit")
@@ -1773,7 +1938,7 @@ export function buildSmileChartRows(
     });
 
     const rawBestBidScatter: ScatterRow[] = quotePoints.flatMap((point) => {
-      const x = safeNumber(point.log_moneyness);
+      const x = resolvePointLogMoneyness(point, resolvedAtm);
       const y = resolvePointBestBidIvForExchange(point, "deribit");
       if (x == null || y == null) return [];
 
@@ -1791,7 +1956,7 @@ export function buildSmileChartRows(
     });
 
     const rawBestAskScatter: ScatterRow[] = quotePoints.flatMap((point) => {
-      const x = safeNumber(point.log_moneyness);
+      const x = resolvePointLogMoneyness(point, resolvedAtm);
       const y = resolvePointBestAskIvForExchange(point, "deribit");
       if (x == null || y == null) return [];
 
@@ -1809,7 +1974,7 @@ export function buildSmileChartRows(
     });
 
     const rawOkxScatter: ScatterRow[] = quotePoints.flatMap((point) => {
-      const x = safeNumber(point.log_moneyness);
+      const x = resolvePointLogMoneyness(point, resolvedAtm);
       if (x == null) return [];
 
       const okxPoint = resolvePointByExchange(point, "okx");
@@ -1882,7 +2047,7 @@ export function buildSmileChartRows(
     });
 
     const rawLastTradeScatter: ScatterRow[] = quotePoints.flatMap((point) => {
-      const x = safeNumber(point.log_moneyness);
+      const x = resolvePointLogMoneyness(point, resolvedAtm);
       const y = resolvePointLastTradeIv(point);
       if (x == null || y == null) return [];
       const tradeUpdateTs = safeNumber(point.last_trade_update_ts);
@@ -1921,7 +2086,7 @@ export function buildSmileChartRows(
         expiry: smile.expiry,
         label: smile.label || formatExpiry(smile.expiry),
         readableExpiry: formatExpiry(smile.expiry, smile.label),
-        atm: quoteState?.atm ?? smileAtm,
+        atm: resolvedAtm,
         lastTradePrice: quoteState?.lastTradePrice ?? null,
         hasDeribit,
         hasOkx,
@@ -2040,7 +2205,7 @@ export function buildSmileChartRows(
       expiry: smile.expiry,
       label: smile.label || formatExpiry(smile.expiry),
       readableExpiry: formatExpiry(smile.expiry, smile.label),
-      atm: quoteState?.atm ?? smileAtm,
+      atm: resolvedAtm,
       lastTradePrice,
       hasDeribit,
       hasOkx,

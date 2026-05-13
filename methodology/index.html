@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Crypto Options Volatility Surface Methodology | DerivaSys</title>
+    <meta
+      name="description"
+      content="DerivaSys methodology for building a real-time BTC, ETH, and altcoin crypto options volatility surface: quote normalization, forward context, SVI calibration, risk nodes, and fit diagnostics."
+    />
+    <meta
+      name="keywords"
+      content="BTC options methodology, ETH options methodology, altcoin options, crypto options volatility surface, SVI calibration, no-arbitrage constraints"
+    />
+    <meta
+      name="robots"
+      content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1"
+    />
+    <link rel="canonical" href="https://dashboard.derivasys.com/methodology/" />
+    <link rel="icon" type="image/svg+xml" href="/derivasys.svg" />
+    <link rel="stylesheet" href="/seo-pages.css" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="DerivaSys" />
+    <meta property="og:title" content="Crypto Options Volatility Surface Methodology | DerivaSys" />
+    <meta
+      property="og:description"
+      content="How a live BTC, ETH, and altcoin crypto options surface is built from streaming quotes, normalized by expiry, fit with SVI, and monitored in production."
+    />
+    <meta property="og:url" content="https://dashboard.derivasys.com/methodology/" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta property="og:image" content="https://dashboard.derivasys.com/og/derivasys-surface-card.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="DerivaSys volatility surface dashboard preview" />
+    <meta name="twitter:image" content="https://dashboard.derivasys.com/og/derivasys-surface-card.png" />
+    <meta name="twitter:image:alt" content="DerivaSys volatility surface dashboard preview" />
+    <!-- Google tag (gtag.js) -->
+    <script
+      async
+      src="https://www.googletagmanager.com/gtag/js?id=G-W5S4S464RQ"
+    ></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag("js", new Date());
+      gtag("config", "G-W5S4S464RQ");
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Article",
+        "headline": "Crypto Options Volatility Surface Methodology",
+        "description": "DerivaSys methodology for building a live fitted BTC, ETH, and altcoin crypto options volatility surface from streaming market data.",
+        "url": "https://dashboard.derivasys.com/methodology/",
+        "mainEntityOfPage": "https://dashboard.derivasys.com/methodology/",
+        "author": {
+          "@type": "Person",
+          "name": "Sean Gordon"
+        },
+        "datePublished": "2026-05-11T00:00:00+01:00",
+        "dateModified": "2026-05-13T00:00:00+01:00",
+        "image": [
+          "https://dashboard.derivasys.com/og/derivasys-surface-card.png",
+          "https://dashboard.derivasys.com/screenshots/risk-reversal-fly-panels.png"
+        ],
+        "keywords": [
+          "BTC options methodology",
+          "ETH options methodology",
+          "altcoin options",
+          "SVI calibration",
+          "crypto options volatility surface"
+        ],
+        "publisher": {
+          "@type": "Organization",
+          "name": "DerivaSys",
+          "url": "https://dashboard.derivasys.com/",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://dashboard.derivasys.com/derivasys.svg"
+          }
+        }
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Dashboard",
+            "item": "https://dashboard.derivasys.com/"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "Methodology",
+            "item": "https://dashboard.derivasys.com/methodology/"
+          }
+        ]
+      }
+    </script>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="topbar" data-seo-header>
+        <button
+          class="nav-toggle"
+          type="button"
+          aria-label="Project links"
+          aria-expanded="false"
+          aria-controls="project-links-menu"
+          data-menu-toggle
+        >
+          <span class="nav-toggle__bar" aria-hidden="true"></span>
+          <span class="nav-toggle__bar" aria-hidden="true"></span>
+          <span class="nav-toggle__bar" aria-hidden="true"></span>
+        </button>
+        <a class="brand-lockup" href="/" aria-label="DerivaSys dashboard">
+          <svg
+            class="brand-lockup__mark"
+            viewBox="0 0 64 64"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
+          >
+            <rect x="4" y="4" width="56" height="56" stroke="#4f669f" stroke-width="4" />
+            <path
+              d="M14 42L28 28L39 39L53 25"
+              stroke="#4f669f"
+              stroke-width="4"
+              stroke-linecap="square"
+              stroke-linejoin="miter"
+            />
+            <path d="M45 25H53V33" stroke="#4f669f" stroke-width="4" stroke-linecap="square" />
+          </svg>
+          <span class="brand-lockup__text">
+            <span class="brand-lockup__eyebrow">Surface monitor</span>
+            <span class="brand-lockup__title">Derivasys</span>
+          </span>
+        </a>
+        <nav id="project-links-menu" class="nav-links" aria-label="Project links">
+          <a href="/">Dashboard</a>
+          <a href="/crypto-options-volatility-surface/">Crypto options</a>
+          <a href="/explainer/">Explainer</a>
+          <a href="/what-is-svi/">What is SVI</a>
+          <a href="/methodology/" class="active" aria-current="page">Methodology</a>
+          <a href="/real-time-volatility-surface/">Real-time surface</a>
+          <a href="/arbitrage-constraints/">Arb constraints</a>
+          <a href="/aws-architecture/">AWS architecture</a>
+          <a href="/kafka-kubernetes-roadmap/">Kafka/K8s roadmap</a>
+          <a href="https://medium.com/@gdnaes/building-a-real-time-crypto-volatility-surface-system-2435b6be2f93" target="_blank" rel="noreferrer">Medium</a>
+          <a href="https://dev.to/gdnaes/building-a-real-time-crypto-volatility-surface-system-3nbf" target="_blank" rel="noreferrer">DEV</a>
+          <a href="https://github.com/SGordonQD/volatility-surface-front-end" target="_blank" rel="noreferrer">GitHub</a>
+          <a href="mailto:gdnaes@gmail.com?subject=DerivaSys%20volatility%20surface">Contact</a>
+        </nav>
+      </header>
+
+      <main>
+        <section class="hero">
+          <div class="eyebrow">Production Workflow</div>
+          <h1>Volatility surface methodology</h1>
+          <p>
+            A live surface is only as good as the workflow around it. The
+              DerivaSys dashboard is backed by a streaming BTC, ETH, and
+              altcoin options methodology that starts with raw market quotes,
+              normalizes them into comparable smile data, calibrates SVI fits,
+              and publishes
+            diagnostics alongside the result.
+          </p>
+          <div class="hero-actions">
+            <a class="primary" href="/">Open the dashboard</a>
+            <a class="secondary" href="/what-is-svi/">Start with the SVI primer</a>
+          </div>
+        </section>
+
+        <section class="content-grid">
+          <article class="panel">
+            <h2>1. Ingest and normalize market data</h2>
+            <p>
+              Streaming option quotes arrive venue by venue with different
+              conventions, quality levels, and update timing. The first stage is
+              to align expiries, strikes, forwards, and quote provenance so that
+              the calibration layer sees comparable data rather than raw venue
+              noise.
+            </p>
+            <ul>
+              <li>Capture bid, ask, and last-trade context separately</li>
+              <li>Normalize expiry and strike identifiers across venues</li>
+              <li>Track venue-level overlays such as Deribit and OKX</li>
+              <li>Preserve timestamps so stale levels can be diagnosed</li>
+            </ul>
+
+            <h2>2. Build smile coordinates</h2>
+            <p>
+              Once quotes are normalized, the system places them into smile
+              coordinates using forward-aware strike context and log-moneyness.
+              That creates the x-axis used by the fitted variance curves and the
+              surface view.
+            </p>
+
+            <h2>3. Calibrate SVI on each expiry</h2>
+            <p>
+              Each expiry is fit independently in variance space, typically with
+              constraints designed to reduce unstable parameter jumps and prevent
+              obviously unrealistic shapes. This is where the raw quote cloud is
+              transformed into a smooth curve.
+            </p>
+            <ul>
+              <li>Fit a continuous variance smile from discrete market points</li>
+              <li>Stabilize skew and curvature relative to noisy quotes</li>
+              <li>Retain enough flexibility to follow genuine market moves</li>
+            </ul>
+
+            <h2>4. Derive risk nodes and tenor rows</h2>
+            <p>
+              The fitted smile supports downstream analytics: ATM context, risk
+              reversals, flies, smile node grids, tenor interpolation, and
+              term-structure views. These derived measures are often easier for
+              traders to monitor than raw fit parameters.
+            </p>
+            <figure class="screenshot-figure">
+              <img
+                src="/screenshots/risk-reversal-fly-panels.png"
+                alt="Risk reversal and fly analytics derived from fitted crypto options smiles"
+                width="1440"
+                height="1120"
+                loading="lazy"
+              />
+              <figcaption>
+                Derived RR and fly rows translate the fitted smile into skew and
+                curvature views that are easier to monitor than raw SVI parameters.
+              </figcaption>
+            </figure>
+
+            <h2>5. Publish snapshots, patches, and diagnostics</h2>
+            <p>
+              The API broadcasts full snapshots for bootstrap and sparse patches
+              for live updates. Alongside the surface itself, it publishes fit
+              metrics and data-quality diagnostics so the consumer can separate
+              true market moves from feed or calibration issues.
+            </p>
+            <ol>
+              <li>Surface snapshot for initial state</li>
+              <li>Surface patch for changed expiries</li>
+              <li>Smile levels by exchange and quote type</li>
+              <li>Tenor rows, RR/fly nodes, and fit-status messages</li>
+            </ol>
+          </article>
+
+          <aside class="stats">
+            <div class="panel">
+              <strong>Methodology goals</strong>
+              <p>
+                Keep the fit responsive to live markets, but stable enough that
+                risk and visualization do not thrash on every noisy print.
+              </p>
+            </div>
+            <div class="panel">
+              <strong>Why diagnostics matter</strong>
+              <p>
+                A trader needs to know whether a move comes from the market, a
+                stale venue overlay, a calibration edge case, or a missing feed.
+              </p>
+            </div>
+            <div class="panel">
+              <strong>Related pages</strong>
+              <div class="section-links">
+                <a href="/what-is-svi/">
+                  What Is SVI
+                  <span>The conceptual overview of the smile parameterization itself.</span>
+                </a>
+                <a href="/real-time-volatility-surface/">
+                  Real-Time Volatility Surface
+                  <span>How those calibrated objects appear in the live UI.</span>
+                </a>
+              </div>
+            </div>
+          </aside>
+        </section>
+
+        <p class="footer-note">
+          This methodology page is intentionally descriptive rather than
+          implementation-specific, so it can explain the production workflow in
+          a way that remains useful to search and human readers. For project
+          questions, contact Sean Gordon at
+          <a href="mailto:gdnaes@gmail.com?subject=DerivaSys%20volatility%20surface">gdnaes@gmail.com</a>.
+        </p>
+      </main>
+    </div>
+    <script src="/seo-header.js" defer></script>
+  </body>
+</html>

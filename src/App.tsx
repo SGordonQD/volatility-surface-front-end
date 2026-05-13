@@ -10,6 +10,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+import { Menu, X } from "lucide-react";
 
 import "./App.css";
 import { MiniSmileCanvasChart, SmileCanvasChart, VarianceCanvasChart } from "./components/CanvasCharts";
@@ -27,6 +28,7 @@ import {
   chooseTickStep,
   FITTED_CURVE_COLOR,
   formatTs,
+  resolveAtmForExpiryOrLabel,
   safeDomain,
   safeNumber,
   snapDown,
@@ -45,6 +47,13 @@ import type {
   SmileChartRow,
   TenorByKey,
 } from "./lib/svi-types";
+
+const GITHUB_REPO_URL = "https://github.com/SGordonQD/volatility-surface-front-end";
+const MEDIUM_WRITEUP_URL =
+  "https://medium.com/@gdnaes/building-a-real-time-crypto-volatility-surface-system-2435b6be2f93";
+const DEV_WRITEUP_URL = "https://dev.to/gdnaes/building-a-real-time-crypto-volatility-surface-system-3nbf";
+const CONTACT_EMAIL = "gdnaes@gmail.com";
+const CONTACT_MAILTO_URL = "mailto:gdnaes@gmail.com?subject=DerivaSys%20volatility%20surface";
 
 function Card({
   children,
@@ -102,6 +111,7 @@ function getColumnCount(width: number) {
 }
 
 const DISCLAIMER_ACK_KEY = "SVI_DISCLAIMER_ACK_V1";
+const CANONICAL_DASHBOARD_URL = "https://dashboard.derivasys.com";
 const DAYS_FALLBACK_NOW_MS = Date.now();
 
 type RuntimeDebugSnapshot = {
@@ -123,6 +133,15 @@ function isSviRuntimeDebugEnabled() {
   try {
     const params = new URLSearchParams(window.location.search);
     return localStorage.getItem("SVI_DEBUG") === "1" || params.get("sviDebug") === "1";
+  } catch {
+    return false;
+  }
+}
+
+function isDeprecatedDashboardHost() {
+  try {
+    const hostname = window.location.hostname.toLowerCase();
+    return hostname.endsWith(".cloudfront.net") || hostname === "d3aguc7rjxxwih.cloudfront.net";
   } catch {
     return false;
   }
@@ -271,10 +290,8 @@ function DashboardHeader({
   lastSnapshotUpdated,
   reconnectAttempt,
   snapshotCcy,
-  snapshotKind,
   smileCount,
-  tradeAlert,
-  tradeAlertVisible,
+  statusText,
 }: {
   connected: boolean;
   currentFitError: number | null;
@@ -283,11 +300,15 @@ function DashboardHeader({
   lastSnapshotUpdated: number | null;
   reconnectAttempt: number;
   snapshotCcy: string;
-  snapshotKind: string;
   smileCount: number;
-  tradeAlert: { id: number; message: string } | null;
-  tradeAlertVisible: boolean;
+  statusText: string;
 }) {
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [isProjectMenuOpen, setProjectMenuOpen] = useState(false);
+  const projectMenuRef = useRef<HTMLDivElement | null>(null);
+  const isScrolledRef = useRef(false);
+  const lastScrollYRef = useRef(0);
+  const lastHeaderToggleAtRef = useRef(0);
   const currentFitClass =
     currentFitError != null && lastFitError != null
       ? currentFitError > lastFitError
@@ -295,10 +316,144 @@ function DashboardHeader({
         : "metric-card__value metric-card__value--down"
       : "metric-card__value";
 
+  useEffect(() => {
+    const compactThreshold = 72;
+    const expandThreshold = 4;
+    const toggleLockMs = 220;
+    let frameId = 0;
+
+    const applyScrollState = () => {
+      frameId = 0;
+      const scrollY = Math.max(window.scrollY, 0);
+      const previousScrollY = lastScrollYRef.current;
+      const current = isScrolledRef.current;
+      const now = performance.now();
+      const isToggleLocked = now - lastHeaderToggleAtRef.current < toggleLockMs;
+
+      let next = current;
+      if (current) {
+        const isScrollingUp = scrollY < previousScrollY;
+        if (scrollY <= expandThreshold && isScrollingUp && !isToggleLocked) {
+          next = false;
+        }
+      } else if (scrollY > compactThreshold && !isToggleLocked) {
+        next = true;
+      }
+
+      lastScrollYRef.current = scrollY;
+      if (next === current) return;
+
+      isScrolledRef.current = next;
+      lastHeaderToggleAtRef.current = now;
+      setIsScrolled(next);
+    };
+
+    const handleScroll = () => {
+      if (frameId !== 0) return;
+      frameId = window.requestAnimationFrame(applyScrollState);
+    };
+
+    lastScrollYRef.current = Math.max(window.scrollY, 0);
+    isScrolledRef.current = lastScrollYRef.current > compactThreshold;
+    setIsScrolled(isScrolledRef.current);
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => {
+      if (frameId !== 0) {
+        window.cancelAnimationFrame(frameId);
+      }
+      window.removeEventListener("scroll", handleScroll);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isProjectMenuOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (projectMenuRef.current?.contains(event.target as Node)) return;
+      setProjectMenuOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setProjectMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isProjectMenuOpen]);
+
+  const closeProjectMenu = useCallback(() => {
+    setProjectMenuOpen(false);
+  }, []);
+
   return (
-    <header className="app-toolbar">
+    <header
+      className={`app-toolbar ${isScrolled ? "app-toolbar--compact" : ""} ${
+        isProjectMenuOpen ? "app-toolbar--menu-open" : ""
+      }`.trim()}
+    >
       <div className="app-toolbar__inner">
         <div className="app-toolbar__topline">
+          <div ref={projectMenuRef} className="project-menu">
+            <button
+              type="button"
+              className={`project-menu__button ${isProjectMenuOpen ? "is-open" : ""}`.trim()}
+              aria-label="Project links"
+              aria-expanded={isProjectMenuOpen}
+              aria-controls="project-links-menu"
+              onClick={() => setProjectMenuOpen((open) => !open)}
+            >
+              {isProjectMenuOpen ? <X size={22} aria-hidden="true" /> : <Menu size={22} aria-hidden="true" />}
+            </button>
+            {isProjectMenuOpen ? (
+              <nav id="project-links-menu" className="project-menu__panel" aria-label="Project links">
+                <a href="/" onClick={closeProjectMenu}>
+                  Dashboard
+                </a>
+                <a href="/crypto-options-volatility-surface/" onClick={closeProjectMenu}>
+                  Crypto options
+                </a>
+                <a href="/explainer/" onClick={closeProjectMenu}>
+                  Explainer
+                </a>
+                <a href="/what-is-svi/" onClick={closeProjectMenu}>
+                  What is SVI
+                </a>
+                <a href="/methodology/" onClick={closeProjectMenu}>
+                  Methodology
+                </a>
+                <a href="/real-time-volatility-surface/" onClick={closeProjectMenu}>
+                  Real-time surface
+                </a>
+                <a href="/arbitrage-constraints/" onClick={closeProjectMenu}>
+                  Arb constraints
+                </a>
+                <a href="/aws-architecture/" onClick={closeProjectMenu}>
+                  AWS architecture
+                </a>
+                <a href="/kafka-kubernetes-roadmap/" onClick={closeProjectMenu}>
+                  Kafka/K8s roadmap
+                </a>
+                <a href={MEDIUM_WRITEUP_URL} target="_blank" rel="noreferrer" onClick={closeProjectMenu}>
+                  Medium
+                </a>
+                <a href={DEV_WRITEUP_URL} target="_blank" rel="noreferrer" onClick={closeProjectMenu}>
+                  DEV
+                </a>
+                <a href={GITHUB_REPO_URL} target="_blank" rel="noreferrer" onClick={closeProjectMenu}>
+                  GitHub
+                </a>
+                <a href={CONTACT_MAILTO_URL} onClick={closeProjectMenu}>
+                  Contact
+                </a>
+              </nav>
+            ) : null}
+          </div>
+
           <div className="brand-lockup">
             <svg
               className="brand-lockup__mark"
@@ -324,6 +479,8 @@ function DashboardHeader({
               <h1 className="app-toolbar__title">Derivasys</h1>
             </div>
           </div>
+
+          <div className="app-toolbar__balance-spacer" aria-hidden="true" />
 
           <div className="app-toolbar__stats">
             <div className="metric-card">
@@ -363,8 +520,7 @@ function DashboardHeader({
 
         <div className="app-toolbar__summary">
           <p className="app-toolbar__subtitle">
-            Real-time arbitrage-free implied volatility surface calibrated to live order book data. Displays
-            model-implied vols, risk reversals, and butterfly spreads across maturities.
+            Real-time arbitrage-free implied volatility surface calibrated to live order book data.
           </p>
           <div className="app-toolbar__summary-controls">
             <div className="app-toolbar__meta">
@@ -373,32 +529,15 @@ function DashboardHeader({
                 {connected ? "Feed Online" : "Feed Offline"}
               </span>
               <span className="terminal-pill terminal-pill--dim">{snapshotCcy}</span>
-              <span className="terminal-pill terminal-pill--dim">{snapshotKind}</span>
               <span className="terminal-pill terminal-pill--dim">{smileCount} smiles</span>
+              <span className="terminal-pill terminal-pill--dim">{statusText}</span>
               {!connected && reconnectAttempt > 0 ? (
                 <span className="terminal-pill terminal-pill--warn">retry #{reconnectAttempt}</span>
               ) : null}
             </div>
-            <div className="model-strip" aria-label="Pricing engine summary">
-              <span>Model: SVI</span>
-              <span>Calibration: constrained no-arb</span>
-            </div>
-            <a
-              className="source-contact-link"
-              href="mailto:gdnaes@gmail.com?subject=Vol%20Surface%20source%20code%20review"
-            >
-              Request source review
-            </a>
           </div>
         </div>
       </div>
-      {tradeAlert ? (
-        <div className="app-toolbar__notice">
-          <div className={`trade-alert ${tradeAlertVisible ? "is-visible" : ""}`} role="status" aria-live="polite">
-            {tradeAlert.message}
-          </div>
-        </div>
-      ) : null}
     </header>
   );
 }
@@ -422,6 +561,13 @@ function FirstVisitDisclaimer({ onAcknowledge }: { onAcknowledge: () => void }) 
         <p className="disclaimer-modal__copy">
           By continuing, you acknowledge these limitations, that this is not investment advice, and that data should be
           independently validated before trading or risk decisions.
+        </p>
+        <p className="disclaimer-modal__copy">
+          New to the project? Read the{" "}
+          <a className="disclaimer-modal__link" href="/explainer/">
+            project explainer
+          </a>
+          .
         </p>
         <div className="disclaimer-modal__actions">
           <button type="button" className="disclaimer-modal__button" onClick={onAcknowledge}>
@@ -463,17 +609,28 @@ function FirstVisitIntro({ onContinue }: { onContinue: () => void }) {
           It is intended as an operational dashboard, not a trading ticket or source of record.
         </p>
         <p className="disclaimer-modal__copy">
+          If you are reviewing the project for the first time, start with the{" "}
+          <a className="disclaimer-modal__link" href="/explainer/">
+            project explainer
+          </a>
+          .
+        </p>
+        <p className="disclaimer-modal__copy">
           Although demonstrated on crypto options, the framework is designed around general pricing-system problems:
           constrained calibration, market data normalisation, curve/surface construction, risk generation, and
           trader-facing visualisation. These concepts transfer directly to rates curves, swaption surfaces, credit
           curves, and fixed income analytics.
         </p>
         <p className="disclaimer-modal__copy">
-          Please contact Sean Gordon (
-          <a className="disclaimer-modal__link" href="mailto:gdnaes@gmail.com">
-            gdnaes@gmail.com
+          The frontend source code is available in the{" "}
+          <a className="disclaimer-modal__link" href={GITHUB_REPO_URL} target="_blank" rel="noreferrer">
+            GitHub repository
           </a>
-          ) if you would like to review the source code.
+          . For review questions, contact{" "}
+          <a className="disclaimer-modal__link" href={CONTACT_MAILTO_URL}>
+            {CONTACT_EMAIL}
+          </a>
+          .
         </p>
         <div className="disclaimer-modal__actions">
           <button type="button" className="disclaimer-modal__button" onClick={onContinue}>
@@ -481,6 +638,15 @@ function FirstVisitIntro({ onContinue }: { onContinue: () => void }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function DeprecatedHostBanner() {
+  return (
+    <div className="deprecated-host-banner" role="status" aria-live="polite">
+      <strong>Please use the official dashboard URL:</strong>
+      <a href={CANONICAL_DASHBOARD_URL}>{CANONICAL_DASHBOARD_URL}</a>
     </div>
   );
 }
@@ -1441,16 +1607,6 @@ function toRiskReversalRowsFromTenors(tenorByKey: TenorByKey) {
     });
 }
 
-function buildExpiryLookupCandidates(expiry: number) {
-  const candidates = new Set<string>([String(expiry)]);
-  if (Math.abs(expiry) < 1e11) {
-    candidates.add(String(Math.round(expiry * 1000)));
-  } else {
-    candidates.add(String(Math.round(expiry / 1000)));
-  }
-  return [...candidates];
-}
-
 function findAmtfStrike(nodes: Record<string, RiskReversalNode>) {
   for (const [key, node] of Object.entries(nodes)) {
     const normalizedKey = canonicalRiskLabel(key);
@@ -1472,6 +1628,27 @@ function formatRiskAxisTick(value: number, asPercent: boolean) {
   return value.toFixed(2);
 }
 
+function formatChartExpiryLabel(expiry: number) {
+  try {
+    const date = new Date(expiry);
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(date.getUTCDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  } catch {
+    return formatExpiryFromTs(expiry);
+  }
+}
+
+function formatChartSeriesLabel(rowLabel: string | undefined, expiry: number) {
+  const trimmedLabel = rowLabel?.trim();
+  if (!trimmedLabel) return formatChartExpiryLabel(expiry);
+  if (/^\d{1,2}[A-Z]{3}\d{2}$/i.test(trimmedLabel)) {
+    return formatChartExpiryLabel(expiry);
+  }
+  return trimmedLabel;
+}
+
 function buildRiskCategorySeries(
   rows: RiskReversalState[],
   categoryKeys: string[],
@@ -1489,7 +1666,7 @@ function buildRiskCategorySeries(
       });
       if (!values.some((value) => value != null)) return null;
 
-      const displayLabel = row.label ?? formatExpiryFromTs(row.expiry);
+      const displayLabel = formatChartSeriesLabel(row.label, row.expiry);
       const seriesId = `${row.expiry}:${displayLabel}`;
       return {
         id: seriesId,
@@ -1551,7 +1728,7 @@ function buildFlyNodeSeries(rows: FlyState[], flyLabels: string[]) {
       });
       if (!values.some((value) => value != null)) return null;
 
-      const displayLabel = row.label ?? formatExpiryFromTs(row.expiry);
+      const displayLabel = formatChartSeriesLabel(row.label, row.expiry);
       const seriesId = `${row.expiry}:${displayLabel}`;
       return {
         id: seriesId,
@@ -2132,41 +2309,8 @@ function RiskCategoryChart({
   );
 }
 
-function resolveAtmByExpiryOrLabel(
-  expiry: number,
-  label: string | undefined,
-  quotesByExpiry: QuotesByExpiry
-) {
-  for (const key of buildExpiryLookupCandidates(expiry)) {
-    const byKey = quotesByExpiry[key];
-    const atm = safeNumber(byKey?.atm);
-    if (atm != null && atm > 0) return atm;
-  }
-
-  const targetLabel = (label ?? "").trim().toUpperCase();
-  if (targetLabel) {
-    let bestAtm: number | null = null;
-    let bestTs = Number.NEGATIVE_INFINITY;
-
-    for (const quoteState of Object.values(quotesByExpiry)) {
-      const quoteLabel = (quoteState.label ?? "").trim().toUpperCase();
-      if (quoteLabel !== targetLabel) continue;
-      const atm = safeNumber(quoteState.atm);
-      if (atm == null || atm <= 0) continue;
-      if ((quoteState.ts ?? 0) > bestTs) {
-        bestTs = quoteState.ts ?? 0;
-        bestAtm = atm;
-      }
-    }
-
-    if (bestAtm != null) return bestAtm;
-  }
-
-  return null;
-}
-
 function resolveAtmForRiskRow(row: RiskReversalState, quotesByExpiry: QuotesByExpiry) {
-  const quoteAtm = resolveAtmByExpiryOrLabel(row.expiry, row.label, quotesByExpiry);
+  const quoteAtm = resolveAtmForExpiryOrLabel(row.expiry, row.label, quotesByExpiry);
   if (quoteAtm != null) return quoteAtm;
 
   return findAmtfStrike(row.risk_reversal_nodes ?? {});
@@ -2278,7 +2422,7 @@ function resolveAtmForFlyRow(row: FlyState, quotesByExpiry: QuotesByExpiry) {
   const directAtm = safeNumber(row.atm);
   if (directAtm != null && directAtm > 0) return directAtm;
 
-  const quoteAtm = resolveAtmByExpiryOrLabel(row.expiry, row.label, quotesByExpiry);
+  const quoteAtm = resolveAtmForExpiryOrLabel(row.expiry, row.label, quotesByExpiry);
   if (quoteAtm != null) return quoteAtm;
 
   return findAmtfStrike(row.nodes ?? {});
@@ -2498,11 +2642,11 @@ const FlyMetricsPanel = memo(function FlyMetricsPanel({
               <tr>
                 <th className="risk-grid__stub">{rowMode === "tenor" ? "Tenor" : "Maturity"}</th>
                 <th className="risk-grid__atm-head">ATM</th>
-                {flyLabels.map((label) => (
-                  <th key={label}>{formatFlyLabel(label)}</th>
-                ))}
                 {flyMetricLabels.map((label) => (
                   <th key={`fly-metric-${label}`}>{formatFlyMetricLabel(label)}</th>
+                ))}
+                {flyLabels.map((label) => (
+                  <th key={label}>{formatFlyLabel(label)}</th>
                 ))}
               </tr>
             </thead>
@@ -2513,6 +2657,18 @@ const FlyMetricsPanel = memo(function FlyMetricsPanel({
                     <span className="risk-grid__stub-main">{row.label ?? formatExpiryFromTs(row.expiry)}</span>
                   </th>
                   <td className="risk-grid__atm">{formatAtmNumber(resolveAtmForFlyRow(row, quotesByExpiry))}</td>
+                  {flyMetricLabels.map((label) => {
+                    const value = resolveFlyValueByLabel(row, label);
+                    const flashState = flashByCell[toFlyMetricCellKey("fly", row.expiry, label, row.label)];
+                    const flashClass = flashState
+                      ? `risk-grid__rr--${flashState.direction} risk-grid__flash-token-${flashState.nonce % 2 === 0 ? "a" : "b"}`
+                      : "";
+                    return (
+                      <td key={`fly-value-${label}`} className={`risk-grid__rr ${flashClass}`.trim()}>
+                        {formatFlyMetricValue(value)}
+                      </td>
+                    );
+                  })}
                   {flyLabels.map((label) => {
                     const node = resolveNodeByLabel(row.nodes, label);
                     const value = safeNumber(node?.vol);
@@ -2538,18 +2694,6 @@ const FlyMetricsPanel = memo(function FlyMetricsPanel({
                       </td>
                     );
                   })}
-                  {flyMetricLabels.map((label) => {
-                    const value = resolveFlyValueByLabel(row, label);
-                    const flashState = flashByCell[toFlyMetricCellKey("fly", row.expiry, label, row.label)];
-                    const flashClass = flashState
-                      ? `risk-grid__rr--${flashState.direction} risk-grid__flash-token-${flashState.nonce % 2 === 0 ? "a" : "b"}`
-                      : "";
-                    return (
-                      <td key={`fly-value-${label}`} className={`risk-grid__rr ${flashClass}`.trim()}>
-                        {formatFlyMetricValue(value)}
-                      </td>
-                    );
-                  })}
                 </tr>
               ))}
             </tbody>
@@ -2561,15 +2705,6 @@ const FlyMetricsPanel = memo(function FlyMetricsPanel({
 
         {flyNodeChartSeries.length > 0 && flyNodeCategoryLabels.length > 0 ? (
           <div className="risk-category-charts">
-            <RiskCategoryChart
-              title={flyChartTitle}
-              xLabel={flyChartXAxisLabel}
-              yLabel="vol"
-              categories={flyNodeCategoryLabels}
-              series={flyNodeChartSeries}
-              yTickFormatter={(value) => formatRiskAxisTick(value, true)}
-              doubleHeight
-            />
             {flyDaysSeries.length > 0 ? (
               <RrDaysChart
                 title="Fly by Days"
@@ -2579,6 +2714,15 @@ const FlyMetricsPanel = memo(function FlyMetricsPanel({
                 doubleHeight
               />
             ) : null}
+            <RiskCategoryChart
+              title={flyChartTitle}
+              xLabel={flyChartXAxisLabel}
+              yLabel="vol"
+              categories={flyNodeCategoryLabels}
+              series={flyNodeChartSeries}
+              yTickFormatter={(value) => formatRiskAxisTick(value, true)}
+              doubleHeight
+            />
           </div>
         ) : null}
       </Card>
@@ -2794,11 +2938,11 @@ const RiskReversalNodesPanel = memo(function RiskReversalNodesPanel({
               <tr>
                 <th className="risk-grid__stub">{rowMode === "tenor" ? "Tenor" : "Maturity"}</th>
                 <th className="risk-grid__atm-head">ATM</th>
-                {nodeLabels.map((label) => (
-                  <th key={label}>{label}</th>
-                ))}
                 {rrLabels.map((label) => (
                   <th key={`rr-head-${label}`}>{formatRiskReversalLabel(label)}</th>
+                ))}
+                {nodeLabels.map((label) => (
+                  <th key={label}>{label}</th>
                 ))}
               </tr>
             </thead>
@@ -2809,6 +2953,18 @@ const RiskReversalNodesPanel = memo(function RiskReversalNodesPanel({
                     <span className="risk-grid__stub-main">{row.label ?? formatExpiryFromTs(row.expiry)}</span>
                   </th>
                   <td className="risk-grid__atm">{formatAtmNumber(resolveAtmForRiskRow(row, quotesByExpiry))}</td>
+                  {rrLabels.map((label) => {
+                    const value = safeNumber(row.risk_reversals?.[label]);
+                    const flashState = flashByCell[toRiskMetricCellKey("rr", row.expiry, label, row.label)];
+                    const flashClass = flashState
+                      ? `risk-grid__rr--${flashState.direction} risk-grid__flash-token-${flashState.nonce % 2 === 0 ? "a" : "b"}`
+                      : "";
+                    return (
+                      <td key={`rr-${label}`} className={`risk-grid__rr ${flashClass}`.trim()}>
+                        {formatRiskReversalValue(value)}
+                      </td>
+                    );
+                  })}
                   {nodeLabels.map((label) => {
                     const node = resolveNodeByLabel(row.risk_reversal_nodes, label);
                     const flashState = flashByCell[toRiskMetricCellKey("node", row.expiry, label, row.label)];
@@ -2833,18 +2989,6 @@ const RiskReversalNodesPanel = memo(function RiskReversalNodesPanel({
                       </td>
                     );
                   })}
-                  {rrLabels.map((label) => {
-                    const value = safeNumber(row.risk_reversals?.[label]);
-                    const flashState = flashByCell[toRiskMetricCellKey("rr", row.expiry, label, row.label)];
-                    const flashClass = flashState
-                      ? `risk-grid__rr--${flashState.direction} risk-grid__flash-token-${flashState.nonce % 2 === 0 ? "a" : "b"}`
-                      : "";
-                    return (
-                      <td key={`rr-${label}`} className={`risk-grid__rr ${flashClass}`.trim()}>
-                        {formatRiskReversalValue(value)}
-                      </td>
-                    );
-                  })}
                 </tr>
               ))}
             </tbody>
@@ -2852,6 +2996,15 @@ const RiskReversalNodesPanel = memo(function RiskReversalNodesPanel({
         </div>
 
         <div className="risk-category-charts">
+          {rrLabels.length > 0 ? (
+            <RrDaysChart
+              title="RR by Days"
+              xLabel="days"
+              yLabel="rr"
+              series={rrDaysSeries}
+              doubleHeight
+            />
+          ) : null}
           {nodeLabels.length > 0 ? (
             <RiskCategoryChart
               title={nodeChartTitle}
@@ -2862,15 +3015,6 @@ const RiskReversalNodesPanel = memo(function RiskReversalNodesPanel({
               yTickFormatter={(value) => formatRiskAxisTick(value, true)}
               focusedSeriesId={focusedRiskSeriesId}
               onSeriesFocusToggle={handleRiskSeriesFocusToggle}
-              doubleHeight
-            />
-          ) : null}
-          {rrLabels.length > 0 ? (
-            <RrDaysChart
-              title="RR by Days"
-              xLabel="days"
-              yLabel="rr"
-              series={rrDaysSeries}
               doubleHeight
             />
           ) : null}
@@ -3010,8 +3154,6 @@ export default function App() {
     deribit: true,
     okx: true,
   });
-  const [tradeAlert, setTradeAlert] = useState<{ id: number; message: string } | null>(null);
-  const [tradeAlertVisible, setTradeAlertVisible] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(() => {
     if (typeof window === "undefined") return false;
     try {
@@ -3021,7 +3163,6 @@ export default function App() {
     }
   });
   const [showIntro, setShowIntro] = useState(showDisclaimer);
-  const lastTradeAlertKeyRef = useRef<string>("");
   const continueFromIntro = useCallback(() => {
     setShowIntro(false);
   }, []);
@@ -3043,6 +3184,7 @@ export default function App() {
     quotesByExpiry,
     reconnectAttempt,
     riskReversalByExpiry,
+    statusText,
     tenorByKey,
     snapshot,
   } = useSviFeed();
@@ -3055,7 +3197,7 @@ export default function App() {
   const surfaceGrid = useMemo(() => buildSurfaceGrid(snapshot), [snapshot]);
   const gTestUnit = useMemo(
     () =>
-      snapshot?.smiles.find((smile) => typeof smile.g_test_unit === "string")?.g_test_unit ??
+      snapshot?.smiles?.find((smile) => typeof smile.g_test_unit === "string")?.g_test_unit ??
       surfaceGrid?.rows.find((row) => typeof row.g_test_unit === "string")?.g_test_unit ??
       null,
     [snapshot, surfaceGrid]
@@ -3181,65 +3323,6 @@ export default function App() {
     return () => window.cancelAnimationFrame(frameId);
   }, [canSplitOverviewPanels, expandedFitPanel]);
 
-  useEffect(() => {
-    let latestTradeEvent:
-      | {
-          updateTs: number;
-          expiry: number;
-          label: string;
-          strike: number;
-          iv: number;
-        }
-      | null = null;
-
-    for (const row of smileChartRows) {
-      for (const point of row.lastTradeScatter) {
-        if (point.tradeUpdateTs == null || point.flashUntilTs == null) continue;
-        if (!latestTradeEvent || point.tradeUpdateTs > latestTradeEvent.updateTs) {
-          latestTradeEvent = {
-            updateTs: point.tradeUpdateTs,
-            expiry: row.expiry,
-            label: row.label,
-            strike: point.strike,
-            iv: point.y,
-          };
-        }
-      }
-    }
-
-    if (!latestTradeEvent) return;
-
-    const eventKey = `${latestTradeEvent.updateTs}:${latestTradeEvent.expiry}:${latestTradeEvent.strike}:${latestTradeEvent.iv.toFixed(4)}`;
-    if (eventKey === lastTradeAlertKeyRef.current) return;
-    lastTradeAlertKeyRef.current = eventKey;
-
-    const nextAlert = {
-      id: latestTradeEvent.updateTs,
-      message: `Last Trade IV ${latestTradeEvent.label} K ${formatStrike(latestTradeEvent.strike)} ${latestTradeEvent.iv.toFixed(2)}%`,
-    };
-    let enterRaf: number | null = null;
-    const showRaf = window.requestAnimationFrame(() => {
-      setTradeAlert(nextAlert);
-      setTradeAlertVisible(false);
-      enterRaf = window.requestAnimationFrame(() => {
-        setTradeAlertVisible(true);
-      });
-    });
-    const fadeTimeout = window.setTimeout(() => {
-      setTradeAlertVisible(false);
-    }, 2200);
-    const clearTimeout = window.setTimeout(() => {
-      setTradeAlert((current) => (current?.id === nextAlert.id ? null : current));
-    }, 2900);
-
-    return () => {
-      window.cancelAnimationFrame(showRaf);
-      if (enterRaf != null) window.cancelAnimationFrame(enterRaf);
-      window.clearTimeout(fadeTimeout);
-      window.clearTimeout(clearTimeout);
-    };
-  }, [smileChartRows]);
-
   const rowHeight = chartHeight + (isPhoneLayout ? 72 : 88);
   const rowCount = Math.ceil(smileDisplayRows.length / columnCount);
   const [startRow, endRow] = useVirtualGrid({
@@ -3268,9 +3351,11 @@ export default function App() {
   const varianceHeight = varianceExpanded ? overviewExpandedVarianceHeight : overviewCompactVarianceHeight;
   const surface3DHeight = surface3DExpanded ? overviewExpandedSurfaceHeight : overviewCompactSurfaceHeight;
   const gTestHeight = gTestExpanded ? overviewExpandedVarianceHeight : overviewCompactVarianceHeight;
+  const showDeprecatedHostBanner = isDeprecatedDashboardHost();
 
   return (
     <div className="app-shell">
+      {showDeprecatedHostBanner ? <DeprecatedHostBanner /> : null}
       {showIntro ? <FirstVisitIntro onContinue={continueFromIntro} /> : null}
       {showDisclaimer && !showIntro ? <FirstVisitDisclaimer onAcknowledge={acknowledgeDisclaimer} /> : null}
       <DashboardHeader
@@ -3281,10 +3366,8 @@ export default function App() {
         lastSnapshotUpdated={lastSnapshotUpdated}
         reconnectAttempt={reconnectAttempt}
         snapshotCcy={snapshot?.ccy ?? "—"}
-        snapshotKind={snapshot?.x_axis?.kind ?? "x"}
-        smileCount={snapshot?.smiles.length ?? 0}
-        tradeAlert={tradeAlert}
-        tradeAlertVisible={tradeAlertVisible}
+        smileCount={snapshot?.smiles?.length ?? 0}
+        statusText={statusText}
       />
 
       <div ref={outerRef} className="app-layout">
@@ -3391,7 +3474,7 @@ export default function App() {
                   series={gTestSeries}
                   snapshotKind={snapshot?.x_axis?.kind ?? "x"}
                   snapshotCcy={snapshot?.ccy ?? "—"}
-                  smileCount={snapshot?.smiles.length ?? 0}
+                  smileCount={snapshot?.smiles?.length ?? 0}
                   unit={gTestUnit}
                   height={gTestHeight}
                   xDomain={gTestXDomain}
@@ -3413,7 +3496,7 @@ export default function App() {
                   series={varianceSeries}
                   snapshotKind={snapshot?.x_axis?.kind ?? "x"}
                   snapshotCcy={snapshot?.ccy ?? "—"}
-                  smileCount={snapshot?.smiles.length ?? 0}
+                  smileCount={snapshot?.smiles?.length ?? 0}
                   varHeight={varianceHeight}
                   xDomain={varianceXDomain}
                   xTicks={varianceXTicks}
@@ -3431,7 +3514,7 @@ export default function App() {
                   mode={surface3DMode}
                   onModeChange={setSurface3DMode}
                   height={surface3DHeight}
-                  smileCount={snapshot?.smiles.length ?? 0}
+                  smileCount={snapshot?.smiles?.length ?? 0}
                   snapshotTs={snapshot?.ts}
                   expanded={surface3DExpanded}
                   onExpand={canSplitOverviewPanels ? () => setExpandedFitPanel("surface3d") : undefined}

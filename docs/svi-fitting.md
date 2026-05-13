@@ -41,9 +41,15 @@ Important fit signals:
 - Missing or stale implied volatility points.
 - Exchange disagreement across Deribit, Binance, OKX, and other venues.
 
-## Currency Handling
+## Variance Lines And G-Test
 
-SVI fitting is currency-scoped. BTC, ETH, SOL, XRP, BNB, DOGE, ADA, AVAX, LTC, and any other supported crypto options underlying can have separate smiles, surfaces, risk reversal nodes, and websocket ingestion state. The browser requests a currency switch with a `select_currency` websocket message and then resets currency-scoped surface state before receiving the next snapshot.
+SVI calibration is performed in total implied variance space. The variance lines shown in the Fit tab are therefore the native fitted objects: each line represents one expiry across log-moneyness. The volatility view is a transformed presentation of the same fit for users who think in implied-volatility points.
+
+The g-test series is a fit-quality and no-arbitrage diagnostic published by the upstream engine. It is used to monitor whether a fitted SVI smile is drifting toward butterfly-arbitrage issues such as invalid local convexity or suspicious wing behavior. Operators should read g-test movement together with fit error, stale quote state, crossed markets, and quote-through-fit panels rather than treating it as a standalone trading signal.
+
+## Underlying Handling
+
+SVI fitting is underlying-scoped upstream. BTC, ETH, SOL, XRP, BNB, DOGE, ADA, AVAX, LTC, and other altcoin options can have separate smiles, surfaces, risk reversal nodes, and websocket ingestion state in the pricing engine, while this frontend consumes the active surface feed exposed by the old API contract.
 
 ## UI Contract
 
