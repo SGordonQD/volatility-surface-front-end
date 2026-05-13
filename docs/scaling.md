@@ -23,7 +23,7 @@ Practical scaling rules:
 - Batch fast exchange quote updates into compact websocket patches.
 - Prefer numeric fields over verbose nested structures for high-volume implied volatility ticks.
 - Avoid resending static expiry, tenor, and strike metadata unless it changes.
-- Partition heavy backend work upstream so one active surface feed does not block calibration or websocket fanout.
+- Partition heavy backend work upstream by underlying/currency so one active surface feed does not block calibration or websocket fanout.
 - Keep rendering state derived from merged snapshots rather than from raw websocket event history.
 
 ## Rendering Strategy

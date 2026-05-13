@@ -33,7 +33,7 @@ flowchart LR
 
 ## Browser Data Model
 
-The UI treats incoming websocket messages as either full snapshots or incremental patches. It merges updates by expiry, tenor, strike, and exchange so high-frequency implied volatility changes do not require replacing the entire SVI volatility surface.
+The UI treats incoming websocket messages as either full snapshots or incremental patches. It merges updates by expiry, tenor, strike, and exchange within the active feed so high-frequency implied volatility changes do not require replacing the entire SVI volatility surface.
 
 Primary data families:
 

@@ -49,7 +49,7 @@ The g-test series is a fit-quality and no-arbitrage diagnostic published by the 
 
 ## Underlying Handling
 
-SVI fitting is underlying-scoped upstream. BTC, ETH, and altcoin options can have separate smiles, surfaces, risk reversal nodes, and websocket ingestion state in the pricing engine, while this frontend consumes the active surface feed exposed by the old API contract.
+SVI fitting is underlying-scoped upstream. BTC, ETH, SOL, XRP, BNB, DOGE, ADA, AVAX, LTC, and other altcoin options can have separate smiles, surfaces, risk reversal nodes, and websocket ingestion state in the pricing engine, while this frontend consumes the active surface feed exposed by the old API contract.
 
 ## UI Contract
 

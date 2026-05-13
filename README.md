@@ -16,7 +16,7 @@ Description: Real-time crypto options volatility surface analytics platform with
 
 Topics: `svi`, `volatility-surface`, `crypto-options`, `deribit`, `implied-volatility`, `options-analytics`, `quant-finance`, `websockets`, `BTC`
 
-Underlyings: designed for `BTC`, `ETH`, and altcoin crypto options surfaces published by the websocket API as the active feed.
+Underlyings: designed for `BTC`, `ETH`, `SOL`, `XRP`, `BNB`, `DOGE`, `ADA`, `AVAX`, `LTC`, and other altcoin crypto options surfaces when the websocket API publishes them as the active feed.
 
 Tech stack: React, TypeScript, Vite, Canvas charts, Recharts, Framer Motion, Lucide React, CSS, WebSocket APIs, nginx, Docker, S3/CloudFront-compatible static deployment.
 
