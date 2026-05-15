@@ -22,6 +22,7 @@ Tech stack: React, TypeScript, Vite, Canvas charts, Recharts, Framer Motion, Luc
 
 ## Documentation
 
+- [What is SVI?](https://dashboard.derivasys.com/what-is-svi/): plain-English guide to Stochastic Volatility Inspired surface fitting, including how SVI turns noisy crypto options smiles into compact total-variance curves for cleaner risk, term structure, and trader-facing diagnostics.
 - [Architecture](docs/architecture.md): system flow from Deribit/Binance/OKX real-time market data through websocket ingestion into the SVI volatility surface dashboard.
 - [Scaling](docs/scaling.md): browser, API, and websocket scaling notes for high-frequency crypto options implied volatility updates.
 - [SVI Fitting](docs/svi-fitting.md): SVI volatility surface concepts, options smile inputs, risk reversal nodes, and fit-quality diagnostics.
